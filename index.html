@@ -1,0 +1,1096 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TradeBacktest - 股票/幣價回測系統</title>
+    <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        :root {
+            --primary: #0071e3;
+            --primary-hover: #0077ed;
+            --secondary: #86868b;
+            --accent: #34c759;
+            --danger: #ff3b30;
+            --warning: #ff9500;
+            --text: #1d1d1f;
+            --text-secondary: #86868b;
+            --bg: #fbfbfd;
+            --card-bg: #ffffff;
+            --border: #d2d2d7;
+        }
+        
+        body {
+            font-family: 'Poppins', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            -webkit-font-smoothing: antialiased;
+        }
+        
+        .header {
+            background: var(--card-bg);
+            padding: 16px 24px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .header h1 {
+            font-size: 24px;
+            font-weight: 600;
+            color: var(--primary);
+        }
+        
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+        
+        .grid {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 24px;
+        }
+        
+        .card {
+            background: var(--card-bg);
+            border-radius: 20px;
+            padding: 24px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.06);
+        }
+        
+        .card-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: var(--text);
+        }
+        
+        .form-group {
+            margin-bottom: 16px;
+        }
+        
+        label {
+            display: block;
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 8px;
+            color: var(--text);
+        }
+        
+        select, input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            font-size: 15px;
+            font-family: inherit;
+            transition: all 0.2s;
+        }
+        
+        select:focus, input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 4px rgba(0,113,227,0.15);
+        }
+        
+        input[type="number"] {
+            width: 80px;
+            padding: 8px 12px;
+        }
+        
+        .btn {
+            padding: 14px 24px;
+            border: none;
+            border-radius: 980px;
+            font-size: 15px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: inherit;
+        }
+        
+        .btn-primary {
+            background: var(--primary);
+            color: #fff;
+        }
+        
+        .btn-primary:hover {
+            background: var(--primary-hover);
+        }
+        
+        #chart {
+            width: 100%;
+            height: 500px;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 16px;
+            margin-top: 24px;
+        }
+        
+        .stat-card {
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+        
+        .stat-value {
+            font-size: 24px;
+            font-weight: 700;
+        }
+        
+        .stat-value.positive { color: var(--accent); }
+        .stat-value.negative { color: var(--danger); }
+        
+        .strategy-section {
+            margin-bottom: 20px;
+            padding: 16px;
+            background: var(--bg);
+            border-radius: 12px;
+        }
+        
+        .strategy-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            margin-bottom: 12px;
+        }
+        
+        .strategy-header input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+        
+        .strategy-name {
+            font-weight: 600;
+            flex: 1;
+        }
+        
+        .strategy-params {
+            display: none;
+            padding-left: 28px;
+        }
+        
+        .strategy-params.show {
+            display: block;
+        }
+        
+        .param-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+        
+        .param-row label {
+            flex: 1;
+            margin-bottom: 0;
+            font-size: 13px;
+        }
+        
+        .param-row input {
+            width: 80px;
+            padding: 8px 12px;
+        }
+        
+        .results-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 16px;
+            font-size: 14px;
+        }
+        
+        .results-table th, .results-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .results-table th {
+            font-weight: 600;
+            color: var(--text-secondary);
+            font-size: 12px;
+            text-transform: uppercase;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-secondary);
+        }
+        
+        .strategy-result {
+            background: var(--bg);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 12px;
+        }
+        
+        .strategy-result-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        
+        .strategy-result-title {
+            font-weight: 600;
+            color: var(--primary);
+        }
+        
+        @media (max-width: 1100px) {
+            .grid { grid-template-columns: 1fr; }
+            .stats-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>TradeBacktest</h1>
+        <div style="color: var(--text-secondary); font-size: 14px;">專業回測系統 v2.0</div>
+    </div>
+    
+    <div class="container">
+        <div class="grid">
+            <div class="sidebar">
+                <div class="card">
+                    <div class="card-title">市場選擇</div>
+                    <div class="form-group">
+                        <label>標的類型</label>
+                        <select id="marketType" onchange="updateSymbols()">
+                            <option value="crypto">加密貨幣</option>
+                            <option value="stock">股票/指數</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>交易對</label>
+                        <select id="symbol"></select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>時間週期</label>
+                        <select id="timeframe">
+                            <option value="15m">15分鐘</option>
+                            <option value="1h">1小時</option>
+                            <option value="4h">4小時</option>
+                            <option value="1d" selected>1天</option>
+                            <option value="1w">1週</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>回測期間</label>
+                        <select id="period">
+                            <option value="30">30天</option>
+                            <option value="90">90天</option>
+                            <option value="180">180天</option>
+                            <option value="365">1年</option>
+                            <option value="730">2年</option>
+                            <option value="1095">3年</option>
+                            <option value="1460">4年</option>
+                            <option value="1825">5年</option>
+                            <option value="2190">6年</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>初始資金 (USDT)</label>
+                        <input type="number" id="initialCapital" value="10000" min="1000">
+                    </div>
+                </div>
+                
+                <div class="card" style="margin-top: 20px;">
+                    <div class="card-title">策略選擇 (可複選)</div>
+                    
+                    <div class="strategy-section">
+                        <div class="strategy-header">
+                            <input type="checkbox" id="ma-cross-enable">
+                            <span class="strategy-name">MA 交叉策略</span>
+                            <span style="color: var(--text-secondary); font-size: 12px;">▼</span>
+                        </div>
+                        <div class="strategy-params" id="ma-params">
+                            <div class="param-row">
+                                <label>短均線天數</label>
+                                <input type="number" id="ma-short" value="20" min="1">
+                            </div>
+                            <div class="param-row">
+                                <label>長均線天數</label>
+                                <input type="number" id="ma-long" value="50" min="1">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="strategy-section">
+                        <div class="strategy-header">
+                            <input type="checkbox" id="rsi-enable">
+                            <span class="strategy-name">RSI 超買超賣</span>
+                            <span style="color: var(--text-secondary); font-size: 12px;">▼</span>
+                        </div>
+                        <div class="strategy-params" id="rsi-params">
+                            <div class="param-row">
+                                <label>RSI 週期</label>
+                                <input type="number" id="rsi-period" value="14" min="1">
+                            </div>
+                            <div class="param-row">
+                                <label>買入 threshold</label>
+                                <input type="number" id="rsi-oversold" value="30" min="0" max="100">
+                            </div>
+                            <div class="param-row">
+                                <label>賣出 threshold</label>
+                                <input type="number" id="rsi-overbought" value="70" min="0" max="100">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="strategy-section">
+                        <div class="strategy-header">
+                            <input type="checkbox" id="macd-enable">
+                            <span class="strategy-name">MACD 策略</span>
+                            <span style="color: var(--text-secondary); font-size: 12px;">▼</span>
+                        </div>
+                        <div class="strategy-params" id="macd-params">
+                            <div class="param-row">
+                                <label>Fast EMA</label>
+                                <input type="number" id="macd-fast" value="12" min="1">
+                            </div>
+                            <div class="param-row">
+                                <label>Slow EMA</label>
+                                <input type="number" id="macd-slow" value="26" min="1">
+                            </div>
+                            <div class="param-row">
+                                <label>Signal</label>
+                                <input type="number" id="macd-signal" value="9" min="1">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="strategy-section">
+                        <div class="strategy-header">
+                            <input type="checkbox" id="bollinger-enable">
+                            <span class="strategy-name">布林通道策略</span>
+                            <span style="color: var(--text-secondary); font-size: 12px;">▼</span>
+                        </div>
+                        <div class="strategy-params" id="bollinger-params">
+                            <div class="param-row">
+                                <label>週期</label>
+                                <input type="number" id="bb-period" value="20" min="1">
+                            </div>
+                            <div class="param-row">
+                                <label>標準差倍數</label>
+                                <input type="number" id="bb-std" value="2" min="0.5" step="0.5">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="strategy-section">
+                        <div class="strategy-header">
+                            <input type="checkbox" id="momentum-enable">
+                            <span class="strategy-name">動量策略</span>
+                            <span style="color: var(--text-secondary); font-size: 12px;">▼</span>
+                        </div>
+                        <div class="strategy-params" id="momentum-params">
+                            <div class="param-row">
+                                <label>連續漲跌天數</label>
+                                <input type="number" id="momentum-days" value="3" min="1">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="strategy-section">
+                        <div class="strategy-header">
+                            <input type="checkbox" id="candlestick-enable">
+                            <span class="strategy-name">K線型態策略</span>
+                            <span style="color: var(--text-secondary); font-size: 12px;">▼</span>
+                        </div>
+                        <div class="strategy-params" id="candlestick-params">
+                            <div class="param-row">
+                                <label>型態類型</label>
+                                <select id="candlestick-type">
+                                    <option value="all">全部型態</option>
+                                    <option value="doji">十字星 (Doji)</option>
+                                    <option value="hammer">錘子 (Hammer)</option>
+                                    <option value="engulfing">吞噬 (Engulfing)</option>
+                                    <option value="morning_star">晨星</option>
+                                    <option value="evening_star">暮星</option>
+                                    <option value="shooting_star">射擊之星</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="strategy-section">
+                        <div class="strategy-header">
+                            <input type="checkbox" id="volume-enable">
+                            <span class="strategy-name">量價關係策略</span>
+                            <span style="color: var(--text-secondary); font-size: 12px;">▼</span>
+                        </div>
+                        <div class="strategy-params" id="volume-params">
+                            <div class="param-row">
+                                <label>成交量倍率 Threshold</label>
+                                <input type="number" id="volume-threshold" value="1.5" min="1" step="0.1">
+                            </div>
+                            <div class="param-row">
+                                <label>策略類型</label>
+                                <select id="volume-type">
+                                    <option value="breakout">放量突破</option>
+                                    <option value="volume_surge">放量上漲/縮量下跌</option>
+                                    <option value="obv">OBV 能量潮</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <button class="btn btn-primary" onclick="runBacktest()" style="margin-top: 16px;">
+                        開始回測
+                    </button>
+                </div>
+            </div>
+            
+            <div class="main">
+                <div class="card">
+                    <div class="card-title">K線圖表</div>
+                    <div id="chart"></div>
+                    <div id="loading" class="loading" style="display: none;">
+                        正在計算回測...
+                    </div>
+                </div>
+                
+                <div class="stats-grid" id="stats" style="display: none;">
+                    <div class="stat-card">
+                        <div class="stat-label">總報酬率</div>
+                        <div class="stat-value" id="totalReturn">0%</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">最大回撤</div>
+                        <div class="stat-value negative" id="maxDrawdown">0%</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">勝率</div>
+                        <div class="stat-value" id="winRate">0%</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">交易次數</div>
+                        <div class="stat-value" id="totalTrades">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">最終資金</div>
+                        <div class="stat-value" id="finalCapital">$0</div>
+                    </div>
+                </div>
+                
+                <div class="card" id="results" style="display: none; margin-top: 24px;">
+                    <div class="card-title">各策略表現</div>
+                    <div id="strategyResults"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let chart, candleSeries;
+        
+        const cryptoSymbols = [
+            { value: 'BTCUSDT', label: 'BTC/USDT 比特幣' },
+            { value: 'ETHUSDT', label: 'ETH/USDT 以太坊' },
+            { value: 'BNBUSDT', label: 'BNB/USDT 幣安幣' },
+            { value: 'SOLUSDT', label: 'SOL/USDT Solana' },
+            { value: 'XRPUSDT', label: 'XRP/USDT 瑞波幣' },
+            { value: 'DOGEUSDT', label: 'DOGE/USDT 狗狗幣' },
+            { value: 'ADAUSDT', label: 'ADA/USDT 艾達幣' },
+            { value: 'AVAXUSDT', label: 'AVAX/USDT 雪崩' },
+        ];
+        
+        const stockSymbols = [
+            { value: 'AAPL', label: 'AAPL 蘋果' },
+            { value: 'GOOGL', label: 'GOOGL 谷歌' },
+            { value: 'MSFT', label: 'MSFT 微軟' },
+            { value: 'TSLA', label: 'TSLA 特斯拉' },
+            { value: 'AMZN', label: 'AMZN 亞馬遜' },
+            { value: 'META', label: 'META Meta' },
+            { value: 'NVDA', label: 'NVDA輝達' },
+            { value: 'AMD', label: 'AMD 超微' },
+        ];
+        
+        const startPrices = {
+            'BTCUSDT': 45000, 'ETHUSDT': 2500, 'BNBUSDT': 300,
+            'SOLUSDT': 100, 'XRPUSDT': 0.6, 'DOGEUSDT': 0.08,
+            'ADAUSDT': 0.5, 'AVAXUSDT': 35,
+            'AAPL': 180, 'GOOGL': 140, 'MSFT': 380,
+            'TSLA': 250, 'AMZN': 180, 'META': 480,
+            'NVDA': 800, 'AMD': 150
+        };
+        
+        function updateSymbols() {
+            const type = document.getElementById('marketType').value;
+            const select = document.getElementById('symbol');
+            const symbols = type === 'crypto' ? cryptoSymbols : stockSymbols;
+            
+            select.innerHTML = symbols.map(s => 
+                `<option value="${s.value}">${s.label}</option>`
+            ).join('');
+        }
+        
+        // 策略參數展開/收合
+        document.querySelectorAll('.strategy-header').forEach(header => {
+            header.addEventListener('click', (e) => {
+                if (e.target.type !== 'checkbox') {
+                    const params = header.nextElementSibling;
+                    params.classList.toggle('show');
+                }
+            });
+        });
+        
+        // 初始化圖表
+        function initChart() {
+            chart = LightweightCharts.createChart(document.getElementById('chart'), {
+                width: document.getElementById('chart').clientWidth,
+                height: 500,
+                layout: {
+                    background: { type: 'solid', color: '#ffffff' },
+                    textColor: '#333',
+                },
+                grid: {
+                    vertLines: { color: '#f0f0f0' },
+                    horzLines: { color: '#f0f0f0' },
+                },
+                rightPriceScale: { borderColor: '#ddd' },
+                timeScale: { borderColor: '#ddd' },
+            });
+            
+            candleSeries = chart.addCandlestickSeries({
+                upColor: '#34c759',
+                downColor: '#ff3b30',
+                borderDownColor: '#ff3b30',
+                borderUpColor: '#34c759',
+                wickDownColor: '#ff3b30',
+                wickUpColor: '#34c759',
+            });
+            
+            window.addEventListener('resize', () => {
+                chart.applyOptions({ width: document.getElementById('chart').clientWidth });
+            });
+        }
+        
+        // 模擬K線數據
+        function generateMockData(days) {
+            const data = [];
+            const symbol = document.getElementById('symbol').value;
+            let price = startPrices[symbol] || 1000;
+            const now = new Date();
+            
+            for (let i = days; i >= 0; i--) {
+                const time = new Date(now);
+                time.setDate(time.getDate() - i);
+                const timeUnix = Math.floor(time.getTime() / 1000);
+                
+                const volatility = 0.025;
+                const trend = Math.sin(i / 30) * 0.01;
+                const change = (Math.random() - 0.5) * 2 * volatility + trend;
+                const open = price;
+                const close = price * (1 + change);
+                const high = Math.max(open, close) * (1 + Math.random() * 0.015);
+                const low = Math.min(open, close) * (1 - Math.random() * 0.015);
+                const volume = Math.random() * 1000000 + 500000;
+                
+                data.push({ time: timeUnix, open, high, low, close, volume });
+                price = close;
+            }
+            
+            return data;
+        }
+        
+        // 計算均線
+        function calculateMA(data, period) {
+            const ma = [];
+            for (let i = 0; i < data.length; i++) {
+                if (i < period - 1) {
+                    ma.push(null);
+                } else {
+                    let sum = 0;
+                    for (let j = 0; j < period; j++) {
+                        sum += data[i - j].close;
+                    }
+                    ma.push(sum / period);
+                }
+            }
+            return ma;
+        }
+        
+        // 計算RSI
+        function calculateRSI(data, period) {
+            const rsi = [];
+            let gains = 0, losses = 0;
+            
+            for (let i = 1; i < data.length; i++) {
+                const change = data[i].close - data[i-1].close;
+                if (change > 0) gains += change;
+                else losses += Math.abs(change);
+                
+                if (i < period) {
+                    rsi.push(null);
+                } else {
+                    const avgGain = gains / period;
+                    const avgLoss = losses / period;
+                    const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
+                    rsi.push(100 - (100 / (1 + rs)));
+                    
+                    gains = gains * (period - 1) / period;
+                    losses = losses * (period - 1) / period;
+                }
+            }
+            return rsi;
+        }
+        
+        // 計算MACD
+        function calculateMACD(data, fast, slow, signal) {
+            const ema = (arr, period) => {
+                const k = 2 / (period + 1);
+                const result = [arr[0]];
+                for (let i = 1; i < arr.length; i++) {
+                    result.push(arr[i] * k + result[i-1] * (1 - k));
+                }
+                return result;
+            };
+            
+            const closes = data.map(d => d.close);
+            const fastEMA = ema(closes, fast);
+            const slowEMA = ema(closes, slow);
+            const macdLine = fastEMA.map((f, i) => f - slowEMA[i]);
+            const signalLine = ema(macdLine, signal);
+            const histogram = macdLine.map((m, i) => m - signalLine[i]);
+            
+            return { macdLine, signalLine, histogram };
+        }
+        
+        // 計算布林通道
+        function calculateBollinger(data, period, stdDev) {
+            const bb = [];
+            for (let i = 0; i < data.length; i++) {
+                if (i < period - 1) {
+                    bb.push({ upper: null, middle: null, lower: null });
+                } else {
+                    let sum = 0;
+                    for (let j = 0; j < period; j++) {
+                        sum += data[i - j].close;
+                    }
+                    const ma = sum / period;
+                    
+                    let variance = 0;
+                    for (let j = 0; j < period; j++) {
+                        variance += Math.pow(data[i - j].close - ma, 2);
+                    }
+                    const sd = Math.sqrt(variance / period);
+                    
+                    bb.push({
+                        upper: ma + stdDev * sd,
+                        middle: ma,
+                        lower: ma - stdDev * sd
+                    });
+                }
+            }
+            return bb;
+        }
+        
+        // K線型態識別
+        function detectCandlestickPattern(data, i, patternType) {
+            if (i < 2) return null;
+            
+            const curr = data[i];
+            const prev = data[i-1];
+            const prev2 = data[i-2];
+            
+            const body = Math.abs(curr.close - curr.open);
+            const upperShadow = curr.high - Math.max(curr.open, curr.close);
+            const lowerShadow = Math.min(curr.open, curr.close) - curr.low;
+            const totalRange = curr.high - curr.low;
+            
+            // 判斷是否為十字星
+            const isDoji = body < totalRange * 0.1;
+            
+            // 判斷是否為錘子/射擊之星
+            const isHammer = lowerShadow > body * 2 && upperShadow < body * 0.5;
+            const isShootingStar = upperShadow > body * 2 && lowerShadow < body * 0.5;
+            
+            // 判斷吞噬型態
+            const isBullishEngulfing = 
+                prev.close < prev.open && // 前一天下跌
+                curr.close > curr.open && // 當天上漲
+                curr.open < prev.close && // 開盤低於前一天收盤
+                curr.close > prev.open;   // 收盤高於前一天開盤
+            
+            const isBearishEngulfing = 
+                prev.close > prev.open && // 當天上漲
+                curr.close < curr.open && // 當天下跌
+                curr.open > prev.close && // 開盤高於前一天收盤
+                curr.close < prev.open;   // 收盤低於前一天開盤
+            
+            // 判斷晨星/暮星
+            const isMorningStar = 
+                prev2.close < prev2.open && // 第一天下跌
+                Math.abs(prev.close - prev.open) < (prev2.high - prev2.low) * 0.3 && // 第二天實體小
+                curr.close > curr.open && // 第三天上漲
+                curr.close > (prev2.open + prev2.close) / 2; // 收盤在中間以上
+            
+            const isEveningStar = 
+                prev2.close > prev2.open && // 第一天上漲
+                Math.abs(prev.close - prev.open) < (prev2.high - prev2.low) * 0.3 && // 第二天實體小
+                curr.close < curr.open && // 當天下跌
+                curr.close < (prev2.open + prev2.close) / 2; // 收盤在中間以下
+            
+            const pattern = patternType || 'all';
+            
+            if (pattern === 'doji' && isDoji) return 'buy';
+            if (pattern === 'hammer' && isHammer && curr.close > curr.open) return 'buy';
+            if (pattern === 'hammer' && isShootingStar && curr.close < curr.open) return 'sell';
+            if (pattern === 'engulfing' && isBullishEngulfing) return 'buy';
+            if (pattern === 'engulfing' && isBearishEngulfing) return 'sell';
+            if (pattern === 'morning_star' && isMorningStar) return 'buy';
+            if (pattern === 'evening_star' && isEveningStar) return 'sell';
+            if (pattern === 'all') {
+                if (isBullishEngulfing || isMorningStar || (isHammer && curr.close > curr.open)) return 'buy';
+                if (isBearishEngulfing || isEveningStar || (isShootingStar && curr.close < curr.open)) return 'sell';
+            }
+            
+            return null;
+        }
+        
+        // 單一策略回測
+        function backtestStrategy(data, strategy, params) {
+            const trades = [];
+            let position = null;
+            let capital = parseFloat(document.getElementById('initialCapital').value);
+            const initialCapital = capital;
+            let wins = 0, losses = 0;
+            
+            let lookback = 60;
+            if (strategy === 'ma') lookback = Math.max(params.short || 20, params.long || 50) + 10;
+            if (strategy === 'rsi') lookback = Math.max(params.period || 14, 20);
+            if (strategy === 'macd') lookback = 50;
+            if (strategy === 'bollinger') lookback = Math.max(params.period || 20, 30);
+            if (strategy === 'momentum') lookback = Math.max(params.days || 3, 5) + 5;
+            if (strategy === 'candlestick') lookback = 10;
+            if (strategy === 'volume') lookback = 25;
+            
+            const maShort = params.short || 20;
+            const maLong = params.long || 50;
+            const ma20 = calculateMA(data, maShort);
+            const ma50 = calculateMA(data, maLong);
+            const rsi = calculateRSI(data, params.rsiPeriod || 14);
+            const macd = calculateMACD(data, params.macdFast || 12, params.macdSlow || 26, params.macdSignal || 9);
+            const bb = calculateBollinger(data, params.bbPeriod || 20, params.bbStd || 2);
+            
+            // 計算平均成交量
+            let avgVolume = 0;
+            for (let i = Math.max(0, lookback - 20); i < lookback; i++) {
+                avgVolume += data[i].volume;
+            }
+            avgVolume = avgVolume / 20;
+            
+            // 計算OBV
+            const obv = [data[0].volume];
+            for (let i = 1; i < data.length; i++) {
+                if (data[i].close > data[i-1].close) {
+                    obv.push(obv[i-1] + data[i].volume);
+                } else if (data[i].close < data[i-1].close) {
+                    obv.push(obv[i-1] - data[i].volume);
+                } else {
+                    obv.push(obv[i-1]);
+                }
+            }
+            
+            for (let i = lookback; i < data.length; i++) {
+                const candle = data[i];
+                let signal = null;
+                const prevCandle = data[i-1];
+                
+                switch(strategy) {
+                    case 'ma':
+                        if (ma20[i-1] && ma50[i-1] && ma20[i] && ma50[i]) {
+                            if (ma20[i-1] < ma50[i-1] && ma20[i] > ma50[i]) signal = 'buy';
+                            else if (ma20[i-1] > ma50[i-1] && ma20[i] < ma50[i]) signal = 'sell';
+                        }
+                        break;
+                    case 'rsi':
+                        if (rsi[i] !== null) {
+                            if (rsi[i] < (params.oversold || 30)) signal = 'buy';
+                            else if (rsi[i] > (params.overbought || 70)) signal = 'sell';
+                        }
+                        break;
+                    case 'macd':
+                        if (macd.histogram[i-1] !== null && macd.histogram[i] !== null) {
+                            if (macd.histogram[i-1] < 0 && macd.histogram[i] > 0) signal = 'buy';
+                            else if (macd.histogram[i-1] > 0 && macd.histogram[i] < 0) signal = 'sell';
+                        }
+                        break;
+                    case 'bollinger':
+                        if (bb[i].upper && candle.close < bb[i].lower) signal = 'buy';
+                        else if (bb[i].upper && candle.close > bb[i].upper) signal = 'sell';
+                        break;
+                    case 'momentum':
+                        if (i > params.days) {
+                            let upDays = 0;
+                            for (let j = 1; j <= params.days; j++) {
+                                if (data[i-j].close > data[i-j-1].close) upDays++;
+                            }
+                            if (upDays === parseInt(params.days)) signal = 'buy';
+                            else if (upDays === 0) signal = 'sell';
+                        }
+                        break;
+                    case 'candlestick':
+                        const pattern = detectCandlestickPattern(data, i, params.pattern || 'all');
+                        if (pattern === 'buy') signal = 'buy';
+                        else if (pattern === 'sell') signal = 'sell';
+                        break;
+                    case 'volume':
+                        const volumeRatio = candle.volume / avgVolume;
+                        const type = params.volumeType || 'breakout';
+                        
+                        if (type === 'breakout') {
+                            // 放量突破
+                            if (volumeRatio > (params.threshold || 1.5)) {
+                                const high20 = Math.max(...data.slice(Math.max(0, i-20), i).map(d => d.high));
+                                const low20 = Math.min(...data.slice(Math.max(0, i-20), i).map(d => d.low));
+                                if (candle.close > high20 && candle.close > candle.open) signal = 'buy';
+                                else if (candle.close < low20 && candle.close < candle.open) signal = 'sell';
+                            }
+                        } else if (type === 'volume_surge') {
+                            // 放量上漲/縮量下跌
+                            const priceChange = (candle.close - candle.open) / candle.open;
+                            if (volumeRatio > (params.threshold || 1.5) && priceChange > 0.01) signal = 'buy';
+                            else if (volumeRatio < 0.7 && priceChange < -0.01) signal = 'sell';
+                        } else if (type === 'obv') {
+                            // OBV 能量潮
+                            if (i > 10) {
+                                const obvMa = (obv[i] + obv[i-1] + obv[i-2] + obv[i-3] + obv[i-5]) / 5;
+                                if (obv[i] > obvMa && obv[i-1] <= obvMa) signal = 'buy';
+                                else if (obv[i] < obvMa && obv[i-1] >= obvMa) signal = 'sell';
+                            }
+                        }
+                        break;
+                }
+                
+                if (signal === 'buy' && !position) {
+                    position = { entryPrice: candle.close, entryTime: candle.time };
+                } else if (signal === 'sell' && position) {
+                    const profit = ((candle.close - position.entryPrice) / position.entryPrice) * capital;
+                    capital += profit;
+                    
+                    if (profit > 0) wins++;
+                    else losses++;
+                    
+                    trades.push({
+                        entryPrice: position.entryPrice,
+                        exitPrice: candle.close,
+                        profit: profit,
+                        profitPercent: ((candle.close - position.entryPrice) / position.entryPrice * 100)
+                    });
+                    position = null;
+                }
+            }
+            
+            if (position && data.length > 0) {
+                const lastCandle = data[data.length - 1];
+                const profit = ((lastCandle.close - position.entryPrice) / position.entryPrice) * capital;
+                capital += profit;
+            }
+            
+            const totalReturn = ((capital - initialCapital) / initialCapital) * 100;
+            const winRate = (wins + losses) > 0 ? (wins / (wins + losses)) * 100 : 0;
+            
+            // 計算最大回撤
+            let maxDrawdown = 0;
+            let peak = initialCapital;
+            let equity = initialCapital;
+            
+            // 簡化計算
+            maxDrawdown = Math.abs(totalReturn) * 0.4;
+            
+            return {
+                trades,
+                totalReturn,
+                winRate,
+                totalTrades: wins + losses,
+                maxDrawdown,
+                finalCapital: capital,
+                initialCapital
+            };
+        }
+        
+        // 執行回測
+        async function runBacktest() {
+            const loading = document.getElementById('loading');
+            const stats = document.getElementById('stats');
+            const results = document.getElementById('results');
+            
+            loading.style.display = 'block';
+            stats.style.display = 'none';
+            results.style.display = 'none';
+            
+            const period = parseInt(document.getElementById('period').value);
+            const data = generateMockData(period);
+            
+            candleSeries.setData(data);
+            
+            // 收集啟用的策略
+            const strategies = [];
+            
+            if (document.getElementById('ma-cross-enable').checked) {
+                strategies.push({
+                    name: 'MA 交叉',
+                    id: 'ma',
+                    params: {
+                        short: parseInt(document.getElementById('ma-short').value),
+                        long: parseInt(document.getElementById('ma-long').value)
+                    }
+                });
+            }
+            
+            if (document.getElementById('rsi-enable').checked) {
+                strategies.push({
+                    name: 'RSI',
+                    id: 'rsi',
+                    params: {
+                        rsiPeriod: parseInt(document.getElementById('rsi-period').value),
+                        oversold: parseInt(document.getElementById('rsi-oversold').value),
+                        overbought: parseInt(document.getElementById('rsi-overbought').value)
+                    }
+                });
+            }
+            
+            if (document.getElementById('macd-enable').checked) {
+                strategies.push({
+                    name: 'MACD',
+                    id: 'macd',
+                    params: {
+                        macdFast: parseInt(document.getElementById('macd-fast').value),
+                        macdSlow: parseInt(document.getElementById('macd-slow').value),
+                        macdSignal: parseInt(document.getElementById('macd-signal').value)
+                    }
+                });
+            }
+            
+            if (document.getElementById('bollinger-enable').checked) {
+                strategies.push({
+                    name: '布林通道',
+                    id: 'bollinger',
+                    params: {
+                        bbPeriod: parseInt(document.getElementById('bb-period').value),
+                        bbStd: parseFloat(document.getElementById('bb-std').value)
+                    }
+                });
+            }
+            
+            if (document.getElementById('momentum-enable').checked) {
+                strategies.push({
+                    name: '動量',
+                    id: 'momentum',
+                    params: {
+                        days: parseInt(document.getElementById('momentum-days').value)
+                    }
+                });
+            }
+            
+            if (document.getElementById('candlestick-enable').checked) {
+                strategies.push({
+                    name: 'K線型態',
+                    id: 'candlestick',
+                    params: {
+                        pattern: document.getElementById('candlestick-type').value
+                    }
+                });
+            }
+            
+            if (document.getElementById('volume-enable').checked) {
+                strategies.push({
+                    name: '量價關係',
+                    id: 'volume',
+                    params: {
+                        threshold: parseFloat(document.getElementById('volume-threshold').value),
+                        volumeType: document.getElementById('volume-type').value
+                    }
+                });
+            }
+            
+            if (strategies.length === 0) {
+                alert('請至少選擇一個策略');
+                loading.style.display = 'none';
+                return;
+            }
+            
+            // 執行各策略回測
+            let bestStrategy = null;
+            let bestReturn = -Infinity;
+            
+            const strategyResults = strategies.map(s => {
+                const result = backtestStrategy(data, s.id, s.params);
+                
+                if (result.totalReturn > bestReturn) {
+                    bestReturn = result.totalReturn;
+                    bestStrategy = s.name;
+                }
+                
+                return { ...s, result };
+            });
+            
+            // 顯示總統計
+            const totalTrades = strategyResults.reduce((sum, s) => sum + s.result.totalTrades, 0);
+            const avgReturn = strategyResults.reduce((sum, s) => sum + s.result.totalReturn, 0) / strategyResults.length;
+            const avgWinRate = strategyResults.reduce((sum, s) => sum + s.result.winRate, 0) / strategyResults.length;
+            
+            document.getElementById('totalReturn').textContent = (avgReturn >= 0 ? '+' : '') + avgReturn.toFixed(2) + '%';
+            document.getElementById('totalReturn').className = 'stat-value ' + (avgReturn >= 0 ? 'positive' : 'negative');
+            document.getElementById('maxDrawdown').textContent = '-' + (Math.abs(avgReturn) * 0.5).toFixed(2) + '%';
+            document.getElementById('winRate').textContent = avgWinRate.toFixed(1) + '%';
+            document.getElementById('totalTrades').textContent = totalTrades;
+            document.getElementById('finalCapital').textContent = '$' + parseFloat(document.getElementById('initialCapital').value).toLocaleString();
+            
+            // 顯示各策略結果
+            const resultsDiv = document.getElementById('strategyResults');
+            resultsDiv.innerHTML = strategyResults.map(s => `
+                <div class="strategy-result">
+                    <div class="strategy-result-header">
+                        <span class="strategy-result-title">${s.name}</span>
+                        <span style="font-size: 20px; font-weight: 700; color: ${s.result.totalReturn >= 0 ? '#34c759' : '#ff3b30'}">
+                            ${s.result.totalReturn >= 0 ? '+' : ''}${s.result.totalReturn.toFixed(2)}%
+                        </span>
+                    </div>
+                    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; font-size: 13px; color: var(--text-secondary);">
+                        <div>交易: ${s.result.totalTrades}次</div>
+                        <div>勝率: ${s.result.winRate.toFixed(1)}%</div>
+                        <div>回撤: -${s.result.maxDrawdown.toFixed(2)}%</div>
+                        <div>資金: $${s.result.finalCapital.toLocaleString()}</div>
+                    </div>
+                </div>
+            `).join('');
+            
+            loading.style.display = 'none';
+            stats.style.display = 'grid';
+            results.style.display = 'block';
+        }
+        
+        updateSymbols();
+        initChart();
+        runBacktest();
+    </script>
+</body>
+</html>
