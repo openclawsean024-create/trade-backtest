@@ -1,0 +1,7 @@
+{
+  "symbols": ["BTCUSDT", "ETHUSDT", "SOLUSDT"],
+  "keywords": ["golden cross", "death cross", "bullish", "bearish"],
+  "intervals": ["1h", "4h", "1d"],
+  "telegram_token": "",
+  "telegram_chat_id": ""
+}

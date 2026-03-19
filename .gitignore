@@ -1,0 +1,20 @@
+# Environment files (contain secrets)
+.env
+.env.local
+.env.production
+
+# Config with secrets
+config.json
+
+# Signal log
+signal_log.json
+
+# Logs
+*.log
+
+# Node dependencies
+node_modules/
+
+# OS
+.DS_Store
+Thumbs.db
