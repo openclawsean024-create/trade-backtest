@@ -49,7 +49,7 @@
     </style>
 </head>
 <body>
-    <div class="header"><h1>TradeBacktest</h1><div style="color: var(--text-secondary); font-size: 14px;">專業回測系統 v2.2</div></div>
+    <div class="header"><h1>TradeBacktest</h1><div style="display:flex;align-items:center;gap:10px;"><span id="dataBadge" style="font-size:11px;padding:3px 10px;background:#f3f0ff;color:#7c3aed;border-radius:20px;font-weight:600;">讀取中...</span><div style="color: var(--text-secondary); font-size: 14px;">專業回測系統 v2.3</div></div></div>
     <div class="container">
         <div class="grid">
             <div class="sidebar">
@@ -93,6 +93,58 @@
         function updateSymbols() { const type = document.getElementById('marketType').value; const select = document.getElementById('symbol'); const symbols = type === 'crypto' ? cryptoSymbols : stockSymbols; select.innerHTML = symbols.map(s => `<option value="${s.value}">${s.label}</option>`).join(''); }
         document.querySelectorAll('.strategy-header').forEach(header => { header.addEventListener('click', (e) => { if (e.target.type !== 'checkbox') header.nextElementSibling.classList.toggle('show'); }); });
         function initChart() { chart = LightweightCharts.createChart(document.getElementById('chart'), { width: document.getElementById('chart').clientWidth, height: 500, layout: { background: { type: 'solid', color: '#ffffff' }, textColor: '#333' }, grid: { vertLines: { color: '#f0f0f0' }, horzLines: { color: '#f0f0f0' } }, rightPriceScale: { borderColor: '#ddd' }, timeScale: { borderColor: '#ddd' } }); candleSeries = chart.addCandlestickSeries({ upColor: '#34c759', downColor: '#ff3b30', borderDownColor: '#ff3b30', borderUpColor: '#34c759', wickDownColor: '#ff3b30', wickUpColor: '#34c759' }); window.addEventListener('resize', () => chart.applyOptions({ width: document.getElementById('chart').clientWidth })); }
+        async function fetchRealData(symbol, days) {
+            // Fetch real OHLCV data from Binance (crypto) or Yahoo Finance (stocks)
+            const isCrypto = !['AAPL','GOOGL','MSFT','TSLA','AMZN','META','NVDA','AMD'].includes(symbol);
+            try {
+                if (isCrypto) {
+                    // Map timeframe to Binance interval
+                    const tfMap = { '15m':'15m','1h':'1h','4h':'4h','1d':'1d','1w':'1w' };
+                    const interval = tfMap[document.getElementById('timeframe').value] || '1d';
+                    const limit = Math.min(days, 1000);
+                    const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
+                    const res = await fetch(url);
+                    if (!res.ok) throw new Error('Binance API error');
+                    const klines = await res.json();
+                    return klines.map(k => ({
+                        time: Math.floor(k[0] / 1000),
+                        open: parseFloat(k[1]),
+                        high: parseFloat(k[2]),
+                        low: parseFloat(k[3]),
+                        close: parseFloat(k[4]),
+                        volume: parseFloat(k[5])
+                    }));
+                } else {
+                    // Yahoo Finance for stocks
+                    const end = Math.floor(Date.now() / 1000);
+                    const start = end - days * 86400;
+                    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?period1=${start}&period2=${end}&interval=1d`;
+                    const res = await fetch(url);
+                    if (!res.ok) throw new Error('Yahoo Finance error');
+                    const json = await res.json();
+                    const result = json?.chart?.result?.[0];
+                    if (!result) throw new Error('No data');
+                    const timestamps = result.timestamp || [];
+                    const closes = result.indicators?.quote?.[0]?.close || [];
+                    const opens = result.indicators?.quote?.[0]?.open || [];
+                    const highs = result.indicators?.quote?.[0]?.high || [];
+                    const lows = result.indicators?.quote?.[0]?.low || [];
+                    const volumes = result.indicators?.quote?.[0]?.volume || [];
+                    return timestamps.map((t, i) => ({
+                        time: t,
+                        open: opens[i] || 0,
+                        high: highs[i] || 0,
+                        low: lows[i] || 0,
+                        close: closes[i] || 0,
+                        volume: volumes[i] || 0
+                    })).filter(d => d.close > 0);
+                }
+            } catch(e) {
+                console.warn('Real data fetch failed, using fallback:', e.message);
+                return null;
+            }
+        }
+        
         function generateMockData(days) { const data = []; const symbol = document.getElementById('symbol').value; let price = startPrices[symbol] || 1000; const now = new Date(); for (let i = days; i >= 0; i--) { const time = new Date(now); time.setDate(time.getDate() - i); const timeUnix = Math.floor(time.getTime() / 1000); const volatility = 0.025; const trend = Math.sin(i / 30) * 0.01; const change = (Math.random() - 0.5) * 2 * volatility + trend; const open = price; const close = price * (1 + change); const high = Math.max(open, close) * (1 + Math.random() * 0.015); const low = Math.min(open, close) * (1 - Math.random() * 0.015); const volume = Math.random() * 1000000 + 500000; data.push({ time: timeUnix, open, high, low, close, volume }); price = close; } return data; }
         function calculateMA(data, period) { const ma = []; for (let i = 0; i < data.length; i++) { if (i < period - 1) ma.push(null); else { let sum = 0; for (let j = 0; j < period; j++) sum += data[i - j].close; ma.push(sum / period); } } return ma; }
         function calculateRSI(data, period) { const rsi = []; let gains = 0, losses = 0; for (let i = 1; i < data.length; i++) { const change = data[i].close - data[i-1].close; if (change > 0) gains += change; else losses += Math.abs(change); if (i < period) rsi.push(null); else { const avgGain = gains / period; const avgLoss = losses / period; const rs = avgLoss === 0 ? 100 : avgGain / avgLoss; rsi.push(100 - (100 / (1 + rs))); gains = gains * (period - 1) / period; losses = losses * (period - 1) / period; } } return rsi; }
@@ -109,7 +161,7 @@
             return { trades, totalReturn, winRate, totalTrades: wins + losses, maxDrawdown, finalCapital: capital, initialCapital };
         }
         function buildInsight(strategyResults, bestStrategy, avgReturn, avgWinRate) { const best = strategyResults.find(s => s.name === bestStrategy); return `<strong>最佳策略：</strong>${bestStrategy}<br><strong>平均報酬：</strong>${avgReturn.toFixed(2)}%<br><strong>平均勝率：</strong>${avgWinRate.toFixed(1)}%<br><strong>策略建議：</strong>${avgReturn > 0 ? '目前這組參數有正期望，可再進一步做 walk-forward / fee / slippage 驗證。' : '目前這組參數偏弱，建議調整標的、週期或重新優化進出場條件。'}<br><strong>最終資金（最佳策略）：</strong>$${best?.result.finalCapital.toLocaleString() || '0'}`; }
-        async function runBacktest() { const loading = document.getElementById('loading'); const stats = document.getElementById('stats'); const results = document.getElementById('results'); loading.style.display = 'block'; stats.style.display = 'none'; results.style.display = 'none'; const period = parseInt(document.getElementById('period').value); const data = generateMockData(period); candleSeries.setData(data); const strategies = []; if (document.getElementById('ma-cross-enable').checked) strategies.push({ name: 'MA 交叉', id: 'ma', params: { short: parseInt(document.getElementById('ma-short').value), long: parseInt(document.getElementById('ma-long').value) } }); if (document.getElementById('rsi-enable').checked) strategies.push({ name: 'RSI', id: 'rsi', params: { rsiPeriod: parseInt(document.getElementById('rsi-period').value), oversold: parseInt(document.getElementById('rsi-oversold').value), overbought: parseInt(document.getElementById('rsi-overbought').value) } }); if (document.getElementById('macd-enable').checked) strategies.push({ name: 'MACD', id: 'macd', params: { macdFast: parseInt(document.getElementById('macd-fast').value), macdSlow: parseInt(document.getElementById('macd-slow').value), macdSignal: parseInt(document.getElementById('macd-signal').value) } }); if (document.getElementById('bollinger-enable').checked) strategies.push({ name: '布林通道', id: 'bollinger', params: { bbPeriod: parseInt(document.getElementById('bb-period').value), bbStd: parseFloat(document.getElementById('bb-std').value) } }); if (document.getElementById('momentum-enable').checked) strategies.push({ name: '動量', id: 'momentum', params: { days: parseInt(document.getElementById('momentum-days').value) } }); if (document.getElementById('candlestick-enable').checked) strategies.push({ name: 'K線型態', id: 'candlestick', params: { pattern: document.getElementById('candlestick-type').value } }); if (document.getElementById('volume-enable').checked) strategies.push({ name: '量價關係', id: 'volume', params: { threshold: parseFloat(document.getElementById('volume-threshold').value), volumeType: document.getElementById('volume-type').value } });
+        async function runBacktest() { const loading = document.getElementById('loading'); const stats = document.getElementById('stats'); const results = document.getElementById('results'); loading.style.display = 'block'; stats.style.display = 'none'; results.style.display = 'none'; const period = parseInt(document.getElementById('period').value); let data = await fetchRealData(document.getElementById('symbol').value, period); if (!data || data.length < 50) { console.warn('Real API unavailable, using fallback mock data'); data = generateMockData(period); document.getElementById('dataBadge').textContent = '⚠️ 模擬數據'; document.getElementById('dataBadge').style.background = 'rgba(255,149,0,0.15)'; document.getElementById('dataBadge').style.color = '#ff9500'; } else { document.getElementById('dataBadge').textContent = '✅ 真實數據'; document.getElementById('dataBadge').style.background = 'rgba(52,199,89,0.15)'; document.getElementById('dataBadge').style.color = '#34c759'; } candleSeries.setData(data); const strategies = []; if (document.getElementById('ma-cross-enable').checked) strategies.push({ name: 'MA 交叉', id: 'ma', params: { short: parseInt(document.getElementById('ma-short').value), long: parseInt(document.getElementById('ma-long').value) } }); if (document.getElementById('rsi-enable').checked) strategies.push({ name: 'RSI', id: 'rsi', params: { rsiPeriod: parseInt(document.getElementById('rsi-period').value), oversold: parseInt(document.getElementById('rsi-oversold').value), overbought: parseInt(document.getElementById('rsi-overbought').value) } }); if (document.getElementById('macd-enable').checked) strategies.push({ name: 'MACD', id: 'macd', params: { macdFast: parseInt(document.getElementById('macd-fast').value), macdSlow: parseInt(document.getElementById('macd-slow').value), macdSignal: parseInt(document.getElementById('macd-signal').value) } }); if (document.getElementById('bollinger-enable').checked) strategies.push({ name: '布林通道', id: 'bollinger', params: { bbPeriod: parseInt(document.getElementById('bb-period').value), bbStd: parseFloat(document.getElementById('bb-std').value) } }); if (document.getElementById('momentum-enable').checked) strategies.push({ name: '動量', id: 'momentum', params: { days: parseInt(document.getElementById('momentum-days').value) } }); if (document.getElementById('candlestick-enable').checked) strategies.push({ name: 'K線型態', id: 'candlestick', params: { pattern: document.getElementById('candlestick-type').value } }); if (document.getElementById('volume-enable').checked) strategies.push({ name: '量價關係', id: 'volume', params: { threshold: parseFloat(document.getElementById('volume-threshold').value), volumeType: document.getElementById('volume-type').value } });
             if (strategies.length === 0) { alert('請至少選擇一個策略'); loading.style.display = 'none'; return; }
             let bestStrategy = null, bestReturn = -Infinity; const strategyResults = strategies.map(s => { const result = backtestStrategy(data, s.id, s.params); if (result.totalReturn > bestReturn) { bestReturn = result.totalReturn; bestStrategy = s.name; } return { ...s, result }; });
             const totalTrades = strategyResults.reduce((sum, s) => sum + s.result.totalTrades, 0); const avgReturn = strategyResults.reduce((sum, s) => sum + s.result.totalReturn, 0) / strategyResults.length; const avgWinRate = strategyResults.reduce((sum, s) => sum + s.result.winRate, 0) / strategyResults.length;
