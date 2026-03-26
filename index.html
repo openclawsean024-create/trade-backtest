@@ -46,6 +46,20 @@
         .history-item:last-child { border-bottom: none; }
         .history-meta { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
         @media (max-width: 1100px) { .grid { grid-template-columns: 1fr; } .stats-grid { grid-template-columns: repeat(2, 1fr); } }
+        .fundamental-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 12px; }
+        .fundamental-item { background: var(--bg); border-radius: 12px; padding: 14px; }
+        .fundamental-label { font-size: 11px; color: var(--text-secondary); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .fundamental-value { font-size: 16px; font-weight: 600; color: var(--text); }
+        .fundamental-value.positive { color: var(--accent); }
+        .fundamental-value.negative { color: var(--danger); }
+        .fundamental-section { margin-top: 16px; }
+        .fundamental-section-title { font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .fundamental-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+        .fundamental-row:last-child { border-bottom: none; }
+        .fundamental-row-label { color: var(--text-secondary); }
+        .fundamental-row-value { font-weight: 500; }
+        .fundamental-loading { text-align: center; padding: 20px; color: var(--text-secondary); font-size: 13px; }
+        .fundamental-error { color: var(--danger); padding: 16px; text-align: center; font-size: 13px; }
     </style>
 </head>
 <body>
@@ -56,10 +70,16 @@
                 <div class="card">
                     <div class="card-title">市場選擇</div>
                     <div class="form-group"><label>標的類型</label><select id="marketType" onchange="updateSymbols()"><option value="crypto">加密貨幣</option><option value="stock">股票/指數</option></select></div>
-                    <div class="form-group"><label>交易對</label><select id="symbol"></select></div>
+                    <div class="form-group"><label>交易對</label><select id="symbol" onchange="onSymbolChange()"></select></div>
                     <div class="form-group"><label>時間週期</label><select id="timeframe"><option value="15m">15分鐘</option><option value="1h">1小時</option><option value="4h">4小時</option><option value="1d" selected>1天</option><option value="1w">1週</option></select></div>
                     <div class="form-group"><label>回測期間</label><select id="period"><option value="30">30天</option><option value="90">90天</option><option value="180">180天</option><option value="365">1年</option><option value="730">2年</option><option value="1095">3年</option><option value="1460">4年</option><option value="1825">5年</option><option value="2190">6年</option></select></div>
                     <div class="form-group"><label>初始資金 (USDT)</label><input type="number" id="initialCapital" value="10000" min="1000"></div>
+                </div>
+                <div class="card" style="margin-top: 20px;" id="fundamentalCard">
+                    <div class="card-title">基本分析</div>
+                    <div id="fundamentalContent">
+                        <div class="fundamental-loading">選擇股票並執行回測後自動載入...</div>
+                    </div>
                 </div>
                 <div class="card" style="margin-top: 20px;">
                     <div class="card-title">策略選擇 (可複選)</div>
@@ -173,6 +193,103 @@
         function saveSession() { if (!latestSessionPayload) return alert('請先執行一次回測'); const items = getSessions(); items.unshift(latestSessionPayload); setSessions(items.slice(0, 20)); renderHistory(); alert('已保存回測紀錄'); }
         function exportSession() { if (!latestSessionPayload) return alert('請先執行一次回測'); const blob = new Blob([JSON.stringify(latestSessionPayload, null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `backtest-${latestSessionPayload.symbol}-${Date.now()}.json`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
         updateSymbols(); initChart(); renderHistory(); runBacktest();
+
+        // Sync chart + run backtest when symbol changes
+        async function onSymbolChange() {
+            const marketType = document.getElementById('marketType').value;
+            const symbol = document.getElementById('symbol').value;
+
+            // Show loading state immediately
+            const loading = document.getElementById('loading');
+            const stats = document.getElementById('stats');
+            const results = document.getElementById('results');
+            if (loading) loading.style.display = 'block';
+            if (stats) stats.style.display = 'none';
+            if (results) results.style.display = 'none';
+
+            // Fetch fundamental data in parallel with backtest
+            if (marketType === 'stock') {
+                fetchFundamentalData(symbol);
+            } else {
+                document.getElementById('fundamentalContent').innerHTML = `
+                    <div style="text-align:center;padding:20px;color:var(--text-secondary);">
+                        <div style="font-size:24px;margin-bottom:8px;">₿</div>
+                        <div style="font-size:13px;">加密貨幣無基本分析數據</div>
+                    </div>`;
+            }
+
+            // Run full backtest: updates chart + all strategy stats
+            await runBacktest();
+        }
+
+        async function fetchFundamentalData(symbol) {
+            const el = document.getElementById('fundamentalContent');
+            el.innerHTML = '<div class="fundamental-loading">正在載入基本數據...</div>';
+            try {
+                // Call Vercel serverless API route (bypasses CORS)
+                const resp = await fetch(`/api/fundamental?symbol=${encodeURIComponent(symbol)}`);
+                const json = await resp.json();
+
+                if (!json.success || !json.data) {
+                    throw new Error(json.error || 'No data returned');
+                }
+
+                const d = json.data;
+                const pctClass = (v) => {
+                    if (v === 'N/A') return 'fundamental-row-value';
+                    const n = parseFloat(v);
+                    return 'fundamental-row-value fundamental-value ' + (n > 0 ? 'positive' : 'negative');
+                };
+
+                el.innerHTML = `
+                    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border);">
+                        <div style="font-size:28px;font-weight:700;">${d.price !== 'N/A' ? '$' + d.price : ''}</div>
+                        <div>
+                            <div style="font-size:14px;font-weight:600;color:var(--text);">${d.longName}</div>
+                            <div style="font-size:11px;color:var(--text-secondary);">${d.sector !== 'N/A' ? d.sector + ' · ' + d.industry : d.currency}</div>
+                        </div>
+                        <div style="margin-left:auto;text-align:right;">
+                            <div style="font-size:11px;color:var(--text-secondary);">分析師評級</div>
+                            <div style="font-size:12px;font-weight:600;color:var(--primary);text-transform:capitalize;">${d.recommendation}</div>
+                        </div>
+                    </div>
+                    <div class="fundamental-section-title">估值指標</div>
+                    <div class="fundamental-grid">
+                        <div class="fundamental-item"><div class="fundamental-label">P/E 本益比</div><div class="fundamental-value">${d.pe}</div></div>
+                        <div class="fundamental-item"><div class="fundamental-label">Forward P/E</div><div class="fundamental-value">${d.forwardPE}</div></div>
+                        <div class="fundamental-item"><div class="fundamental-label">P/B 股價淨值比</div><div class="fundamental-value">${d.priceToBook}</div></div>
+                        <div class="fundamental-item"><div class="fundamental-label">總市值</div><div class="fundamental-value">${d.marketCap}</div></div>
+                        <div class="fundamental-item"><div class="fundamental-label">企業價值</div><div class="fundamental-value">${d.enterpriseValue}</div></div>
+                        <div class="fundamental-item"><div class="fundamental-label">Beta</div><div class="fundamental-value">${d.beta}</div></div>
+                    </div>
+                    <div class="fundamental-section">
+                        <div class="fundamental-section-title">獲利能力</div>
+                        <div class="fundamental-row"><span class="fundamental-row-label">營收 (TTM)</span><span class="fundamental-row-value">${d.revenue}</span></div>
+                        <div class="fundamental-row"><span class="fundamental-row-label">毛利率</span><span class="${pctClass(d.grossMargin)}">${d.grossMargin}</span></div>
+                        <div class="fundamental-row"><span class="fundamental-row-label">營業利率</span><span class="${pctClass(d.opMargin)}">${d.opMargin}</span></div>
+                        <div class="fundamental-row"><span class="fundamental-row-label">淨利率</span><span class="${pctClass(d.netMargin)}">${d.netMargin}</span></div>
+                        <div class="fundamental-row"><span class="fundamental-row-label">ROE 股東權益報酬</span><span class="${pctClass(d.roe)}">${d.roe}</span></div>
+                        <div class="fundamental-row"><span class="fundamental-row-label">自由現金流</span><span class="fundamental-row-value">${d.freeCashflow}</span></div>
+                    </div>
+                    <div class="fundamental-section">
+                        <div class="fundamental-section-title">股利 & 風險</div>
+                        <div class="fundamental-row"><span class="fundamental-row-label">股息</span><span class="fundamental-row-value">${d.dividend}</span></div>
+                        <div class="fundamental-row"><span class="fundamental-row-label">殖利率</span><span class="fundamental-row-value fundamental-value positive">${d.divYield}</span></div>
+                        <div class="fundamental-row"><span class="fundamental-row-label">EPS 每股盈餘</span><span class="fundamental-row-value">$${d.eps}</span></div>
+                        <div class="fundamental-row"><span class="fundamental-row-label">負債/權益</span><span class="fundamental-row-value">${d.debtToEquity}</span></div>
+                        <div class="fundamental-row"><span class="fundamental-row-label">分析師目標價</span><span class="fundamental-row-value">${d.analystTarget}</span></div>
+                    </div>
+                    <div class="fundamental-section">
+                        <div class="fundamental-section-title">交易量 & 區間</div>
+                        <div class="fundamental-row"><span class="fundamental-row-label">平均日成交量</span><span class="fundamental-row-value">${d.avgVolume}</span></div>
+                        <div class="fundamental-row"><span class="fundamental-row-label">52W 高</span><span class="fundamental-row-value" style="color:var(--danger)">$${d.week52High}</span></div>
+                        <div class="fundamental-row"><span class="fundamental-row-label">52W 低</span><span class="fundamental-row-value" style="color:var(--accent)">$${d.week52Low}</span></div>
+                    </div>
+                `;
+            } catch (e) {
+                el.innerHTML = `<div class="fundamental-error">無法載入基本數據（${symbol}）<br><span style="font-size:11px;color:var(--text-secondary);">API 錯誤：${e.message}</span></div>`;
+            }
+        }
     </script>
 </body>
 </html>
