@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TradeBacktest - 股票/幣價回測系統</title>
-    <script src="/lightweight-charts.4.1.0.js"></script>
+    <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -112,7 +112,27 @@
         function renderHistory(){ const items = getSessions(); const el = document.getElementById('historyList'); if(!items.length){ el.innerHTML = '<div class="history-meta">尚無回測紀錄</div>'; return; } el.innerHTML = items.map(item => `<div class="history-item"><div><strong>${item.symbol}</strong> ｜ ${item.bestStrategy}</div><div class="history-meta">${new Date(item.createdAt).toLocaleString('zh-TW')} ｜ ${item.timeframe} ｜ ${item.period}天 ｜ Avg Return ${item.avgReturn.toFixed(2)}%</div></div>`).join(''); }
         function updateSymbols() { const type = document.getElementById('marketType').value; const select = document.getElementById('symbol'); const symbols = type === 'crypto' ? cryptoSymbols : stockSymbols; select.innerHTML = symbols.map(s => `<option value="${s.value}">${s.label}</option>`).join(''); }
         document.querySelectorAll('.strategy-header').forEach(header => { header.addEventListener('click', (e) => { if (e.target.type !== 'checkbox') header.nextElementSibling.classList.toggle('show'); }); });
-        function initChart() { chart = LightweightCharts.createChart(document.getElementById('chart'), { width: document.getElementById('chart').clientWidth, height: 500, layout: { background: { type: 'solid', color: '#ffffff' }, textColor: '#333' }, grid: { vertLines: { color: '#f0f0f0' }, horzLines: { color: '#f0f0f0' } }, rightPriceScale: { borderColor: '#ddd' }, timeScale: { borderColor: '#ddd' } }); candleSeries = chart.addCandlestickSeries({ upColor: '#34c759', downColor: '#ff3b30', borderDownColor: '#ff3b30', borderUpColor: '#34c759', wickDownColor: '#ff3b30', wickUpColor: '#34c759' }); window.addEventListener('resize', () => chart.applyOptions({ width: document.getElementById('chart').clientWidth })); }
+        function initChart() {
+            const chartContainer = document.getElementById('chart');
+            const width = chartContainer.clientWidth || chartContainer.offsetWidth || 800;
+            chart = LightweightCharts.createChart(chartContainer, {
+                width: width,
+                height: 500,
+                layout: { background: { type: 'solid', color: '#ffffff' }, textColor: '#333' },
+                grid: { vertLines: { color: '#f0f0f0' }, horzLines: { color: '#f0f0f0' } },
+                rightPriceScale: { borderColor: '#ddd' },
+                timeScale: { borderColor: '#ddd' }
+            });
+            candleSeries = chart.addCandlestickSeries({
+                upColor: '#34c759', downColor: '#ff3b30',
+                borderDownColor: '#ff3b30', borderUpColor: '#34c759',
+                wickDownColor: '#ff3b30', wickUpColor: '#34c759'
+            });
+            window.addEventListener('resize', () => {
+                const w = chartContainer.clientWidth || chartContainer.offsetWidth || 800;
+                chart.applyOptions({ width: w, height: 500 });
+            });
+        }
         async function fetchRealData(symbol, days) {
             // Fetch real OHLCV data from Binance (crypto) or Yahoo Finance (stocks)
             const isCrypto = !['AAPL','GOOGL','MSFT','TSLA','AMZN','META','NVDA','AMD'].includes(symbol);
@@ -192,7 +212,12 @@
             loading.style.display = 'none'; stats.style.display = 'grid'; results.style.display = 'block'; }
         function saveSession() { if (!latestSessionPayload) return alert('請先執行一次回測'); const items = getSessions(); items.unshift(latestSessionPayload); setSessions(items.slice(0, 20)); renderHistory(); alert('已保存回測紀錄'); }
         function exportSession() { if (!latestSessionPayload) return alert('請先執行一次回測'); const blob = new Blob([JSON.stringify(latestSessionPayload, null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `backtest-${latestSessionPayload.symbol}-${Date.now()}.json`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
-        updateSymbols(); initChart(); renderHistory(); runBacktest();
+        updateSymbols();
+        requestAnimationFrame(() => {
+            initChart();
+            renderHistory();
+            runBacktest();
+        });
 
         // Sync chart + run backtest when symbol changes
         async function onSymbolChange() {

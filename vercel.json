@@ -20,6 +20,14 @@
       "dest": "/api/fundamental.js"
     },
     {
+      "src": "/lightweight-charts.*\\.js",
+      "dest": "/lightweight-charts.4.1.0.js"
+    },
+    {
+      "src": "/signal-monitor\\.js",
+      "dest": "/signal-monitor.js"
+    },
+    {
       "src": "/(.*)",
       "dest": "/index.html"
     }
