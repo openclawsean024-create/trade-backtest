@@ -1,5 +1,3 @@
-const fetch = require('node-fetch');
-
 module.exports = async (req, res) => {
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -13,7 +11,6 @@ module.exports = async (req, res) => {
   const symbol = (req.query.symbol || '').toUpperCase().trim();
   const days = parseInt(req.query.days || '90');
   const interval = (req.query.interval || '1d').toLowerCase();
-  const limit = Math.min(days, 1000);
 
   if (!symbol) {
     return res.status(400).json({ error: 'Missing symbol parameter' });
@@ -27,50 +24,22 @@ module.exports = async (req, res) => {
       // Binance K-lines API
       const binanceIntervalMap = { '15m': '15m', '1h': '1h', '4h': '4h', '1d': '1d', '1w': '1w' };
       const binanceInterval = binanceIntervalMap[interval] || '1d';
+      const limit = Math.min(days, 1000);
 
-      // Try multiple Binance API endpoints (some support CORS)
-      const endpoints = [
-        `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${binanceInterval}&limit=${limit}`,
-        `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${binanceInterval}&limit=${limit}&startTime=${Date.now() - days * 86400 * 1000}`
-      ];
+      const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${binanceInterval}&limit=${limit}`;
 
-      let klines = null;
-      for (const url of endpoints) {
-        try {
-          const response = await fetch(url, {
-            headers: {
-              'User-Agent': 'Mozilla/5.0',
-              'Accept': 'application/json'
-            }
-          });
-          if (response.ok) {
-            klines = await response.json();
-            if (klines && klines.length > 0) break;
-          }
-        } catch (e) {
-          continue;
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0',
+          'Accept': 'application/json'
         }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Binance API error: ${response.status}`);
       }
 
-      if (!klines || klines.length === 0) {
-        // Try Binance US or alternative
-        const altUrl = `https://api.binance.us/api/v3/klines?symbol=${symbol}&interval=${binanceInterval}&limit=${limit}`;
-        const altRes = await fetch(altUrl, {
-          headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' }
-        });
-        if (altRes.ok) {
-          klines = await altRes.json();
-        }
-      }
-
-      if (!klines || klines.length === 0) {
-        // Fallback: try Binance with CORS proxy via allorigins
-        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${binanceInterval}&limit=${limit}`)}`;
-        const proxyRes = await fetch(proxyUrl);
-        if (proxyRes.ok) {
-          klines = await proxyRes.json();
-        }
-      }
+      const klines = await response.json();
 
       if (!klines || klines.length === 0) {
         return res.status(404).json({ error: 'No Binance data found for ' + symbol });
@@ -91,7 +60,8 @@ module.exports = async (req, res) => {
       const end = Math.floor(Date.now() / 1000);
       const start = end - days * 86400;
 
-      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?period1=${start}&period2=${end}&interval=${interval === '1w' ? '1wk' : interval === '1d' ? '1d' : interval}`;
+      const yfInterval = interval === '1w' ? '1wk' : interval === '1d' ? '1d' : interval;
+      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?period1=${start}&period2=${end}&interval=${yfInterval}`;
 
       const response = await fetch(url, {
         headers: {
