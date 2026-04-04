@@ -134,51 +134,19 @@
             });
         }
         async function fetchRealData(symbol, days) {
-            // Fetch real OHLCV data from Binance (crypto) or Yahoo Finance (stocks)
-            const isCrypto = !['AAPL','GOOGL','MSFT','TSLA','AMZN','META','NVDA','AMD'].includes(symbol);
+            // Fetch real OHLCV data via Vercel serverless API (bypasses CORS)
+            // This serverless function proxies Binance / Yahoo Finance requests
+            const tfMap = { '15m':'15m','1h':'1h','4h':'4h','1d':'1d','1w':'1w' };
+            const interval = tfMap[document.getElementById('timeframe').value] || '1d';
             try {
-                if (isCrypto) {
-                    // Map timeframe to Binance interval
-                    const tfMap = { '15m':'15m','1h':'1h','4h':'4h','1d':'1d','1w':'1w' };
-                    const interval = tfMap[document.getElementById('timeframe').value] || '1d';
-                    const limit = Math.min(days, 1000);
-                    const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
-                    const res = await fetch(url);
-                    if (!res.ok) throw new Error('Binance API error');
-                    const klines = await res.json();
-                    return klines.map(k => ({
-                        time: Math.floor(k[0] / 1000),
-                        open: parseFloat(k[1]),
-                        high: parseFloat(k[2]),
-                        low: parseFloat(k[3]),
-                        close: parseFloat(k[4]),
-                        volume: parseFloat(k[5])
-                    }));
-                } else {
-                    // Yahoo Finance for stocks
-                    const end = Math.floor(Date.now() / 1000);
-                    const start = end - days * 86400;
-                    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?period1=${start}&period2=${end}&interval=1d`;
-                    const res = await fetch(url);
-                    if (!res.ok) throw new Error('Yahoo Finance error');
-                    const json = await res.json();
-                    const result = json?.chart?.result?.[0];
-                    if (!result) throw new Error('No data');
-                    const timestamps = result.timestamp || [];
-                    const closes = result.indicators?.quote?.[0]?.close || [];
-                    const opens = result.indicators?.quote?.[0]?.open || [];
-                    const highs = result.indicators?.quote?.[0]?.high || [];
-                    const lows = result.indicators?.quote?.[0]?.low || [];
-                    const volumes = result.indicators?.quote?.[0]?.volume || [];
-                    return timestamps.map((t, i) => ({
-                        time: t,
-                        open: opens[i] || 0,
-                        high: highs[i] || 0,
-                        low: lows[i] || 0,
-                        close: closes[i] || 0,
-                        volume: volumes[i] || 0
-                    })).filter(d => d.close > 0);
+                const url = `/api/klines?symbol=${encodeURIComponent(symbol)}&days=${days}&interval=${encodeURIComponent(interval)}`;
+                const res = await fetch(url);
+                if (!res.ok) throw new Error(`K-lines API error: ${res.status}`);
+                const json = await res.json();
+                if (!json.success || !json.data || json.data.length < 10) {
+                    throw new Error(json.error || 'No data returned');
                 }
+                return json.data;
             } catch(e) {
                 console.warn('Real data fetch failed, using fallback:', e.message);
                 return null;

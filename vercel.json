@@ -6,6 +6,10 @@
       "use": "@vercel/node"
     },
     {
+      "src": "api/klines.js",
+      "use": "@vercel/node"
+    },
+    {
       "src": "signal-monitor.js",
       "use": "@vercel/static"
     },
@@ -26,6 +30,10 @@
     {
       "src": "/api/fundamental",
       "dest": "/api/fundamental.js"
+    },
+    {
+      "src": "/api/klines",
+      "dest": "/api/klines.js"
     },
     {
       "src": "/signal-monitor.js",
