@@ -1,5 +1,4 @@
 module.exports = async (req, res) => {
-  // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -9,7 +8,7 @@ module.exports = async (req, res) => {
   }
 
   const symbol = (req.query.symbol || '').toUpperCase().trim();
-  const days = parseInt(req.query.days || '90');
+  const days = Math.max(1, Math.min(parseInt(req.query.days || '90'), 365));
   const interval = (req.query.interval || '1d').toLowerCase();
 
   if (!symbol) {
@@ -19,16 +18,29 @@ module.exports = async (req, res) => {
   const stockSymbols = ['AAPL', 'GOOGL', 'MSFT', 'TSLA', 'AMZN', 'META', 'NVDA', 'AMD'];
   const isCrypto = !stockSymbols.includes(symbol);
 
+  // CoinGecko ID mapping for supported crypto symbols
+  const coinGeckoIds = {
+    'BTCUSDT': 'bitcoin',
+    'ETHUSDT': 'ethereum',
+    'BNBUSDT': 'binancecoin',
+    'SOLUSDT': 'solana',
+    'XRPUSDT': 'ripple',
+    'DOGEUSDT': 'dogecoin',
+    'ADAUSDT': 'cardano',
+    'AVAXUSDT': 'avalanche-2',
+  };
+
   try {
     if (isCrypto) {
-      // Binance K-lines API
-      const binanceIntervalMap = { '15m': '15m', '1h': '1h', '4h': '4h', '1d': '1d', '1w': '1w' };
-      const binanceInterval = binanceIntervalMap[interval] || '1d';
-      const limit = Math.min(days, 1000);
+      const coinId = coinGeckoIds[symbol];
+      if (!coinId) {
+        return res.status(400).json({ error: 'Unsupported crypto symbol: ' + symbol });
+      }
 
-      const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${binanceInterval}&limit=${limit}`;
+      // CoinGecko OHLC endpoint: returns [timestamp, open, high, low, close]
+      const cgUrl = `https://api.coingecko.com/api/v3/coins/${coinId}/ohlc?vs_currency=usd&days=${days}`;
 
-      const response = await fetch(url, {
+      const response = await fetch(cgUrl, {
         headers: {
           'User-Agent': 'Mozilla/5.0',
           'Accept': 'application/json'
@@ -36,31 +48,32 @@ module.exports = async (req, res) => {
       });
 
       if (!response.ok) {
-        throw new Error(`Binance API error: ${response.status}`);
+        throw new Error(`CoinGecko API error: ${response.status}`);
       }
 
-      const klines = await response.json();
+      const ohlc = await response.json();
 
-      if (!klines || klines.length === 0) {
-        return res.status(404).json({ error: 'No Binance data found for ' + symbol });
+      if (!Array.isArray(ohlc) || ohlc.length === 0) {
+        return res.status(404).json({ error: 'No CoinGecko data found for ' + symbol });
       }
 
-      const data = klines.map(k => ({
+      // Map CoinGecko OHLC to our format (timestamps are in milliseconds)
+      const data = ohlc.map(k => ({
         time: Math.floor(k[0] / 1000),
-        open: parseFloat(k[1]),
-        high: parseFloat(k[2]),
-        low: parseFloat(k[3]),
-        close: parseFloat(k[4]),
-        volume: parseFloat(k[5])
+        open: k[1],
+        high: k[2],
+        low: k[3],
+        close: k[4],
+        volume: 0 // CoinGecko OHLC doesn't include volume, set to 0
       }));
 
-      return res.status(200).json({ success: true, symbol, interval: binanceInterval, data });
+      return res.status(200).json({ success: true, symbol, interval, data, source: 'coingecko' });
     } else {
       // Yahoo Finance for stocks
       const end = Math.floor(Date.now() / 1000);
       const start = end - days * 86400;
-
       const yfInterval = interval === '1w' ? '1wk' : interval === '1d' ? '1d' : interval;
+
       const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?period1=${start}&period2=${end}&interval=${yfInterval}`;
 
       const response = await fetch(url, {
@@ -100,7 +113,7 @@ module.exports = async (req, res) => {
         }))
         .filter(d => d.close > 0);
 
-      return res.status(200).json({ success: true, symbol, interval, data });
+      return res.status(200).json({ success: true, symbol, interval, data, source: 'yahoo' });
     }
   } catch (error) {
     console.error('K-lines API error:', error.message);
