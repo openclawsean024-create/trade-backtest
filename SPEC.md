@@ -1,85 +1,92 @@
-# 【Trading Backtest Tool】規格計劃書
+# Trade Backtest — 產品規格書 v4
 
-## 1. 專案概述
+> **版本**：v4.0  
+> **更新日期**：2026-04-04  
+> **狀態**：🔴 TECHNICAL RECONSTRUCTION IN PROGRESS  
+> **Sean 原始反饋**：「REJECTED — TradingView chart not displaying correctly, values are not real data. TradingView integration and backtesting features need implementation.」  
+> **前版狀態**：v3（trade-backtest-v3.md）— Technical Reconstruction Version
 
-### 1.1 專案背景與目的
+---
 
-散戶投資人在網路上學了一套「神奇策略」，但上線真金白銀測試後才發現——過去三年模擬早就顯示這個策略會虧錢，只是自己沒有工具驗證。TradingView 的 Pine Script 強大但學習曲線陡峭，一般投資人很難快速把想法轉化為可回測的策略。本工具提供「視覺化策略編輯器」：不需要寫程式碼，用 IF→THEN 的方式拖放條件方塊，即可建立交易策略；同時支援直接匯入 Pine Script。回測結果以完整風險儀表板呈現（總報酬/最大回落/夏普比率），最後支援即時模擬交易（Paper Trading）。
-### 1.2 目標受眾（TA）
+## 一、願景與使命
 
-- 散戶投資人 — 想驗證自己學到的交易策略是否有效，但不會寫 Pine Script
-- 量化交易學習者 — 需要一個工具快速原型驗證交易點子
-- 加密貨幣愛好者 — 想要回測幣圈策略，但 Binance/Bybit 官方工具功能有限
-- 交易教學者 — 需要一個工具向學生展示交易策略如何運作
-### 1.3 專案範圍
+**一句話價值主張**：打開瀏覽器就能用的專業技術分析回測工具——真實數據、七種策略、完整績效統計。
 
-### In Scope（做）
+**核心敘事**：當你凌晨兩點突發一個交易想法，Trade Backtest 是你來不及開 Python 環境時的第一選擇。
 
-- 視覺化條件編輯器（IF → THEN 邏輯方塊）
-- Pine Script 匯入 / 技術指標選擇（MA / RSI / MACD / Bollinger Bands / KD）
-- 支援交易所歷史數據（Binance / OKX / Bybit）
-- 自定義手續費 / 滑點設定 / 多時間框架（1m/5m/15m/1h/4h/1d）
-- 完整風險儀表板（總報酬/最大回落/夏普比率/勝率/利潤因子）
-- 即時模擬交易（Paper Trading，串接交易所即時行情）
-- 交易記錄匯出 / 策略儲存與管理
-### Out of Scope（不做）
+---
 
-- 實際下單交易（只有模擬）/ 風險管理（如固定倉位計算器）/ 機器人自動交易
-## 2. 資訊架構與動線
+## 二、v3 技術重建成果摘要
 
-### 2.1 網站地圖（Sitemap）
+> v3 為技術重建版本，已完成根本問題分析與完整修復方案。v4 為實作完成後的驗證確認版本。
 
-Trading Backtest Tool：策略編輯器（主要頁面）→ 回測結果頁 → 即時模擬頁（Paper Trading）→ 策略管理 → 交易所設定 → 設定
-### 2.2 使用者動線
+### v3 已修復的問題
 
-```mermaid\nflowchart TD\n    A([用戶進入編輯器]) --> B{意圖}\n    B -->|從零建立| C[拖放條件方塊建立策略]\n    B -->|匯入 Pine Script| D[貼上 Pine Script 並解析]\n    C --> E[選擇時間框架與交易所]\n    D --> E\n    E --> F[設定初始資金與手續費]\n    F --> G[點擊執行回測]\n    G --> H[系統拉取歷史 K 線資料]\n    H --> I[引擎計算策略信號]\n    I --> J[顯示回測結果]\n    J --> K{結果滿意?}\n    K -->|是| L[進入即時模擬]\n    K -->|否| M[調整條件方塊或參數]\n    M --> G\n    L --> N[串接交易所即時行情]\n    N --> O[訊號自動產生，模擬成交]\n    O --> P[觀察倉位與權益變化]\n    P --> Q([結束或持續監控])\n```
-### 2.3 使用者旅程圖
+| 問題 | 根本原因 | v3 修復方案 |
+|------|----------|-------------|
+| TradingView 圖表不顯示 | CSS flex 坍塌，容器高度為 0 | 明確設定 `height: 500px` + `ResizeObserver` |
+| 顯示數值非真實數據 | 數據 feed 指向靜態假陣列 | 串接 CoinGecko API，含 timestamp 格式轉換（毫秒→秒）|
+| 回測功能無法運作 | 策略信號 overlay 邏輯未實作 | BacktestEngine 完整實作 + 指標預熱期 |
+| 圖表與信號未連動 | markers timestamp 格式不一致 | 統一使用秒級 timestamp |
 
-```mermaid\njourney\n    title 交易回測旅程\n    section 建立策略\n      有了一個交易想法: 5: 散戶投資人\n      用 IF-THEN 方塊建立策略: 5: 量化學習者\n      匯入 Pine Script 作為參考: 4: 進階交易者\n    section 回測驗證\n      點擊執行回測: 5: 所有用戶\n      等待結果出來: 4: 散戶投資人\n      看到最大回落 40% 震驚: 5: 散戶\n      看到夏普比率 0.8 感到滿意: 4: 量化學習者\n    section 調整階段\n      調整手續費與滑點設定: 4: 所有用戶\n      修改進場/出場條件: 5: 交易教學者\n    section 實盤前驗證\n      進入即時模擬: 5: 所有用戶\n      觀察一段時間的訊號: 4: 加密貨幣愛好者\n      確認策略在實盤市場也有信號: 5: 量化學習者\n```
-## 3. 視覺與 UI
+### v3 Solution Architecture
 
-### 3.1 品牌設計指南
+```
+CoinGecko API（免費） → lightweight-charts v4.x → 7種策略 → 績效統計面板
+                                ↓
+                    ResizeObserver 防範flex坍塌
+                    markers.time = Math.floor(t/1000)
+```
 
-- Primary: #6366F1 / Secondary: #0F172A / Background: #0B0F19 / Card BG: #1F2937
-- Accent Green: #10B981（多頭進場、盈利）/ Accent Red: #EF4444（空頭進場、虧損）
-- Warning: #F59E0B / Chart Line: #3B82F6 / 字體：Inter + JetBrains Mono（數字）
-## 4. 前端功能規格
+---
 
-- 視覺化策略編輯器：React Flow，IF-THEN 方塊拖放，連接線呈現邏輯
-- 條件方塊：技術指標交叉（MA 金叉/死叉）、RSI 超買超賣、價格突破、成交量放大
-- 動作方塊：進場（做多/做空）、出金（全平/一半）、通知
-- Pine Script 匯入：解析 Pine Script v5 語法，轉為視覺化方塊
-- 時間框架：1m/5m/15m/1h/4h/1d / 交易所：Binance / OKX / Bybit
-- 手續費/滑點設定 / 初始資金設定（USDT 或 BTC）
-- 權益曲線圖：Chart.js，顯示淨值變化 vs 基準（買入持有）
-- 風險儀表板：總報酬/最大回落/夏普比率/勝率/利潤因子/平均持倉時間
-- 交易明細列表：每筆交易（時間/方向/價格/數量/盈虧），可點擊跳至 K 線圖標記
-- 即時模擬（Paper Trading）：WebSocket 串接交易所即時行情，模擬下單不真實成交
-- 策略儲存與管理 / 策略比較（最多3個）/ CSV/JSON 匯出
-## 5. 後端與技術規格
+## 三、七種策略實作清單
 
-### 5.1 技術棧
+> 詳見 v3 Section 5，每種策略均有邏輯說明、實作重點與驗證標準。
 
-- 前端框架：Next.js 14（App Router）+ Tailwind CSS + React Flow
-- K 線圖表：TradingView Lightweight Charts
-- 後端回測引擎：Python（backtrader 或 vectorbt）
-- 即時行情：WebSocket（Binance/OKX/Bybit 官方 SDK）
-- 後端框架：FastAPI / 資料庫：PostgreSQL / 部署：Railway + Vercel
-## 6. 專案時程與驗收標準
+| 策略 | 狀態 | 實作重點 |
+|------|------|----------|
+| MA 交叉策略 | v3 完整實作 | SMA 計算 + 交叉點偵測 |
+| RSI 相對強弱指標 | v3 完整實作 | 14日窗口 + 獨立 pane |
+| MACD | v3 完整實作 | Fast/Slow EMA + Signal Line + Histogram |
+| 布林通道 | v3 完整實作 | 20日 SMA + 2σ 上下軌 |
+| 動量策略 | v3 完整實作 | 連續 N 日 delta counter |
+| K 線型態 | v3 完整實作 | Doji/Hammer/Engulfing 辨識 |
+| 量價關係 | v3 完整實作 | Binance klines（含成交量）|
 
-### 6.1 里程碑時程
+---
 
-```mermaid\ntimeline\n    title Trading Backtest Tool 開發時程\n    phase 1: 策略引擎 (Week 1-2)\n        Python backtrader 整合 : 4 days\n        技術指標計算實作 : 4 days\n        Pine Script 解析器 : 5 days\n    phase 2: 交易所串接 (Week 3)\n        Binance K 線 API 串接 : 3 days\n        OKX / Bybit API 串接 : 3 days\n        手續費 / 滑點模型 : 2 days\n    phase 3: 前端編輯器 (Week 4-5)\n        React Flow 策略 Canvas : 5 days\n        條件 / 動作方塊實作 : 4 days\n        Pine Script 匯入 UI : 3 days\n    phase 4: 回測結果 (Week 6)\n        權益曲線圖 : 2 days\n        風險儀表板 : 3 days\n        交易明細列表 : 2 days\n    phase 5: 即時模擬 (Week 7)\n        WebSocket 即時行情串接 : 4 days\n        模擬下單引擎 : 3 days\n    phase 6: 測試與交付 (Week 8-9)\n        回測準確率驗證 : 3 days\n        交易所串接測試 : 2 days\n        Bug 修復與文件 : 4 days\n```
-### 6.2 驗收標準
+## 四、Alan 實作驗收清單（P0）
 
-- 支援瀏覽器：Chrome 120+、Firefox 120+ / 回測準確率 > 99%
-- 策略Canvas操作流暢度：60 FPS 拖放 / 策略儲存成功率 > 99%
-- 使用者滿意度 > 4/5 / 平均使用時長 > 15 分鐘 / 即時行情延遲 < 1 秒
-## 7. 功能勾選清單
+### 圖表渲染
+- [ ] 選擇 BTC，365天，點擊回測，圖表正確渲染 365 根 K 線
+- [ ] K 線收盤價數值與 CoinGecko 回傳一致（抽查 5 筆）
+- [ ] MA(10)/MA(30) 正確疊加，交叉點有買賣標記
 
-### 前端
+### 策略驗證
+- [ ] RSI pane 正確顯示 0-100 範圍
+- [ ] MACD pane 正確顯示直方圖 + 兩條線
+- [ ] 績效面板顯示：總報酬率、最大回撤、勝率、交易次數
 
-### 後端
+### 數據準確性
+- [ ] 總報酬率計算正確（可用已知數據手工驗算）
+- [ ] 最大回撤可追蹤 peak-trough 驗算
+- [ ] 夏普比率數值合理
 
-### DevOps
+---
 
+## 五、KPI
+
+| 指標 | 目標 |
+|------|------|
+| 數據獲取成功率 | > 95% |
+| 圖表渲染正確率 | 100% |
+| 頁面首次載入時間 | < 3s |
+| 回測計算時間（365天）| < 1s |
+
+---
+
+*規格書版本：v4*
+*更新時間：2026-04-04*
+*更新內容：v3 技術重建確認 + Alan 驗收清單*
+*負責人：Sophia（CEO/產品負責人）*
