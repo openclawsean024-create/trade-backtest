@@ -16,97 +16,161 @@ module.exports = async (req, res) => {
     return res.status(400).json({ error: 'Missing symbol parameter' });
   }
 
-  // Map symbol to Yahoo Finance format
-  const yahooSymbol = symbol.endsWith('.') ? symbol : symbol;
+  const headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
+    'Accept': 'application/json, text/plain, */*',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Referer': 'https://finance.yahoo.com/',
+    'Origin': 'https://finance.yahoo.com'
+  };
 
-  try {
-    const modules = encodeURIComponent(
-      'summaryDetail,defaultKeyStatistics,financialData,earnings,price'
-    );
-    const url = `https://query1.finance.yahoo.com/v7/finance/quoteSummary/${yahooSymbol}?modules=${modules}&crumb=%2F9m1LZdJCHD`;
+  const formatLargeNumber = (num) => {
+    if (num === null || num === undefined || Number.isNaN(Number(num))) return 'N/A';
+    if (num >= 1e12) return '$' + (num / 1e12).toFixed(2) + 'T';
+    if (num >= 1e9) return '$' + (num / 1e9).toFixed(2) + 'B';
+    if (num >= 1e6) return '$' + (num / 1e6).toFixed(2) + 'M';
+    return '$' + Number(num).toLocaleString();
+  };
 
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0',
-        'Accept': 'application/json',
-        'Referer': 'https://finance.yahoo.com/',
-        'Cookie': ''
-      }
-    });
+  const formatVolume = (num) => {
+    if (num === null || num === undefined || Number.isNaN(Number(num))) return 'N/A';
+    if (num >= 1e9) return (num / 1e9).toFixed(2) + 'B';
+    if (num >= 1e6) return (num / 1e6).toFixed(2) + 'M';
+    if (num >= 1e3) return (num / 1e3).toFixed(1) + 'K';
+    return Number(num).toString();
+  };
 
-    if (!response.ok) {
-      throw new Error(`Yahoo Finance responded with ${response.status}`);
-    }
+  const extractNumber = (value) => {
+    if (value && typeof value === 'object' && 'raw' in value) return value.raw;
+    return value;
+  };
 
-    const json = await response.json();
-    const result = json?.quoteSummary?.result?.[0];
-
-    if (!result) {
-      return res.status(404).json({ error: 'No data found for symbol: ' + symbol });
-    }
-
+  const buildData = (result) => {
     const sd = result.summaryDetail || {};
     const ks = result.defaultKeyStatistics || {};
     const fd = result.financialData || {};
     const priceData = result.price || {};
 
-    const formatLargeNumber = (num) => {
-      if (!num && num !== 0) return 'N/A';
-      if (num >= 1e12) return '$' + (num / 1e12).toFixed(2) + 'T';
-      if (num >= 1e9) return '$' + (num / 1e9).toFixed(2) + 'B';
-      if (num >= 1e6) return '$' + (num / 1e6).toFixed(2) + 'M';
-      return '$' + num.toLocaleString();
-    };
-
-    const formatVolume = (num) => {
-      if (!num) return 'N/A';
-      if (num >= 1e9) return (num / 1e9).toFixed(2) + 'B';
-      if (num >= 1e6) return (num / 1e6).toFixed(2) + 'M';
-      if (num >= 1e3) return (num / 1e3).toFixed(1) + 'K';
-      return num.toString();
-    };
-
-    const data = {
+    return {
       symbol,
-      price: priceData.regularMarketPrice?.raw || priceData.regularMarketPrice || 'N/A',
-      marketCap: formatLargeNumber(sd.marketCap?.raw),
-      marketCapRaw: sd.marketCap?.raw || 0,
-      pe: sd.trailingPE?.raw ? sd.trailingPE.raw.toFixed(2) : 'N/A',
-      forwardPE: sd.forwardPE?.raw ? sd.forwardPE.raw.toFixed(2) : 'N/A',
-      eps: ks.trailingEps?.raw ? ks.trailingEps.raw.toFixed(2) : 'N/A',
-      priceToBook: sd.priceToBook?.raw ? sd.priceToBook.raw.toFixed(2) : 'N/A',
-      enterpriseValue: formatLargeNumber(sd.enterpriseValue?.raw),
-      beta: ks.beta?.raw ? ks.beta.raw.toFixed(2) : 'N/A',
-      week52High: sd.fiftyTwoWeekHigh?.raw ? sd.fiftyTwoWeekHigh.raw.toFixed(2) : 'N/A',
-      week52Low: sd.fiftyTwoWeekLow?.raw ? sd.fiftyTwoWeekLow.raw.toFixed(2) : 'N/A',
-      avgVolume: formatVolume(sd.averageVolume?.raw || sd.averageVolume?.fmt),
-      revenue: formatLargeNumber(fd.totalRevenue?.raw),
-      grossMargin: fd.grossMargins?.raw ? (fd.grossMargins.raw * 100).toFixed(1) + '%' : 'N/A',
-      opMargin: fd.operatingMargins?.raw ? (fd.operatingMargins.raw * 100).toFixed(1) + '%' : 'N/A',
-      netMargin: fd.profitMargins?.raw ? (fd.profitMargins.raw * 100).toFixed(1) + '%' : 'N/A',
-      roe: fd.returnOnEquity?.raw ? (fd.returnOnEquity.raw * 100).toFixed(1) + '%' : 'N/A',
-      debtToEquity: fd.debtToEquity?.raw ? fd.debtToEquity.raw.toFixed(1) : 'N/A',
-      dividend: sd.dividendRate?.raw ? '$' + sd.dividendRate.raw.toFixed(2) : 'N/A',
-      divYield: sd.dividendYield?.raw ? (sd.dividendYield.raw * 100).toFixed(2) + '%' : 'N/A',
-      analystTarget: fd.growthTargets?.priceTargetAverage?.raw
-        ? '$' + fd.growthTargets.priceTargetAverage.raw.toFixed(2)
+      price: extractNumber(priceData.regularMarketPrice) ?? extractNumber(priceData.postMarketPrice) ?? extractNumber(priceData.preMarketPrice) ?? 'N/A',
+      marketCap: formatLargeNumber(extractNumber(sd.marketCap)),
+      marketCapRaw: extractNumber(sd.marketCap) || 0,
+      pe: extractNumber(sd.trailingPE) ? Number(extractNumber(sd.trailingPE)).toFixed(2) : 'N/A',
+      forwardPE: extractNumber(sd.forwardPE) ? Number(extractNumber(sd.forwardPE)).toFixed(2) : 'N/A',
+      eps: extractNumber(ks.trailingEps) ? Number(extractNumber(ks.trailingEps)).toFixed(2) : 'N/A',
+      priceToBook: extractNumber(sd.priceToBook) ? Number(extractNumber(sd.priceToBook)).toFixed(2) : 'N/A',
+      enterpriseValue: formatLargeNumber(extractNumber(sd.enterpriseValue)),
+      beta: extractNumber(ks.beta) ? Number(extractNumber(ks.beta)).toFixed(2) : 'N/A',
+      week52High: extractNumber(sd.fiftyTwoWeekHigh) ? Number(extractNumber(sd.fiftyTwoWeekHigh)).toFixed(2) : 'N/A',
+      week52Low: extractNumber(sd.fiftyTwoWeekLow) ? Number(extractNumber(sd.fiftyTwoWeekLow)).toFixed(2) : 'N/A',
+      avgVolume: formatVolume(extractNumber(sd.averageVolume) || extractNumber(sd.averageVolume?.fmt)),
+      revenue: formatLargeNumber(extractNumber(fd.totalRevenue)),
+      grossMargin: extractNumber(fd.grossMargins) !== undefined ? (Number(extractNumber(fd.grossMargins)) * 100).toFixed(1) + '%' : 'N/A',
+      opMargin: extractNumber(fd.operatingMargins) !== undefined ? (Number(extractNumber(fd.operatingMargins)) * 100).toFixed(1) + '%' : 'N/A',
+      netMargin: extractNumber(fd.profitMargins) !== undefined ? (Number(extractNumber(fd.profitMargins)) * 100).toFixed(1) + '%' : 'N/A',
+      roe: extractNumber(fd.returnOnEquity) !== undefined ? (Number(extractNumber(fd.returnOnEquity)) * 100).toFixed(1) + '%' : 'N/A',
+      debtToEquity: extractNumber(fd.debtToEquity) ? Number(extractNumber(fd.debtToEquity)).toFixed(1) : 'N/A',
+      dividend: extractNumber(sd.dividendRate) ? '$' + Number(extractNumber(sd.dividendRate)).toFixed(2) : 'N/A',
+      divYield: extractNumber(sd.dividendYield) ? (Number(extractNumber(sd.dividendYield)) * 100).toFixed(2) + '%' : 'N/A',
+      analystTarget: extractNumber(fd.growthTargets?.priceTargetAverage)
+        ? '$' + Number(extractNumber(fd.growthTargets.priceTargetAverage)).toFixed(2)
         : 'N/A',
       recommendation: fd.recommendationKey || 'N/A',
-      numberOfAnalysts: ks.numberOfAnalystOpinions?.raw || 'N/A',
-      totalCash: formatLargeNumber(fd.totalCash?.raw),
-      totalDebt: formatLargeNumber(fd.totalDebt?.raw),
-      operatingCashflow: formatLargeNumber(fd.operatingCashflow?.raw),
-      freeCashflow: formatLargeNumber(fd.freeCashflow?.raw),
+      numberOfAnalysts: extractNumber(ks.numberOfAnalystOpinions) || 'N/A',
+      totalCash: formatLargeNumber(extractNumber(fd.totalCash)),
+      totalDebt: formatLargeNumber(extractNumber(fd.totalDebt)),
+      operatingCashflow: formatLargeNumber(extractNumber(fd.operatingCashflow)),
+      freeCashflow: formatLargeNumber(extractNumber(fd.freeCashflow)),
       sector: priceData.sector || 'N/A',
       industry: priceData.industry || 'N/A',
       longName: priceData.shortName || priceData.longName || symbol,
       currency: priceData.currency || 'USD',
       marketState: priceData.marketState || 'N/A'
     };
+  };
 
-    return res.status(200).json({ success: true, data });
-  } catch (error) {
-    console.error('Fundamental API error:', error.message);
-    return res.status(500).json({ error: 'Failed to fetch data: ' + error.message });
+  const fetchYahooJson = async (url) => {
+    const response = await fetch(url, { headers });
+    const text = await response.text();
+
+    // Check HTTP status first, before attempting JSON parse
+    if (!response.ok) {
+      const snippet = text ? text.slice(0, 150).replace(/\s+/g, ' ') : 'empty body';
+      throw new Error(`HTTP ${response.status}: ${snippet}`);
+    }
+
+    try {
+      const json = JSON.parse(text);
+      return { response, json };
+    } catch (parseError) {
+      // Non-JSON response even with 200 OK — still an error
+      const snippet = text ? text.slice(0, 150).replace(/\s+/g, ' ') : 'empty response';
+      throw new Error(`Yahoo Finance returned non-JSON (HTTP 200): ${snippet}`);
+    }
+  };
+
+  const quoteSummaryUrl = `https://query2.finance.yahoo.com/v7/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=${encodeURIComponent('summaryDetail,defaultKeyStatistics,financialData,price')}`;
+  const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=1d&interval=1d&includePrePost=false&events=div,splits`;
+
+  try {
+    const { response, json } = await fetchYahooJson(quoteSummaryUrl);
+    // response.ok already validated inside fetchYahooJson
+    const result = json?.quoteSummary?.result?.[0];
+    if (result) {
+      return res.status(200).json({ success: true, data: buildData(result), source: 'quoteSummary' });
+    }
+    throw new Error('quoteSummary returned empty result');
+  } catch (primaryError) {
+    try {
+      const { response, json } = await fetchYahooJson(chartUrl);
+      // response.ok already validated inside fetchYahooJson
+      const result = json?.chart?.result?.[0];
+      const meta = result?.meta || {};
+      if (!result || !meta) {
+        throw new Error('Yahoo chart returned empty result');
+      }
+
+      const fallbackData = {
+        symbol,
+        price: extractNumber(meta.regularMarketPrice) ?? 'N/A',
+        marketCap: 'N/A',
+        marketCapRaw: 0,
+        pe: 'N/A',
+        forwardPE: 'N/A',
+        eps: 'N/A',
+        priceToBook: 'N/A',
+        enterpriseValue: 'N/A',
+        beta: 'N/A',
+        week52High: extractNumber(meta.fiftyTwoWeekHigh) ? Number(extractNumber(meta.fiftyTwoWeekHigh)).toFixed(2) : 'N/A',
+        week52Low: extractNumber(meta.fiftyTwoWeekLow) ? Number(extractNumber(meta.fiftyTwoWeekLow)).toFixed(2) : 'N/A',
+        avgVolume: formatVolume(extractNumber(meta.averageDailyVolume3Month) || extractNumber(meta.regularMarketVolume)),
+        revenue: 'N/A',
+        grossMargin: 'N/A',
+        opMargin: 'N/A',
+        netMargin: 'N/A',
+        roe: 'N/A',
+        debtToEquity: 'N/A',
+        dividend: 'N/A',
+        divYield: 'N/A',
+        analystTarget: 'N/A',
+        recommendation: 'N/A',
+        numberOfAnalysts: 'N/A',
+        totalCash: 'N/A',
+        totalDebt: 'N/A',
+        operatingCashflow: 'N/A',
+        freeCashflow: 'N/A',
+        sector: meta.instrumentType || 'N/A',
+        industry: 'N/A',
+        longName: meta.longName || meta.shortName || symbol,
+        currency: meta.currency || 'USD',
+        marketState: meta.marketState || 'N/A'
+      };
+
+      return res.status(200).json({ success: true, data: fallbackData, source: 'chartFallback', warning: primaryError.message });
+    } catch (fallbackError) {
+      console.error('Fundamental API error:', fallbackError.message);
+      return res.status(500).json({ error: 'Failed to fetch data: ' + fallbackError.message });
+    }
   }
 };

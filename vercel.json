@@ -6,11 +6,23 @@
       "use": "@vercel/node"
     },
     {
-      "src": "*.html",
+      "src": "api/klines.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "signal-monitor.js",
       "use": "@vercel/static"
     },
     {
-      "src": "*.js",
+      "src": "SPEC.md",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "config.json.example",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "index.html",
       "use": "@vercel/static"
     }
   ],
@@ -20,11 +32,11 @@
       "dest": "/api/fundamental.js"
     },
     {
-      "src": "/lightweight-charts.*\\.js",
-      "dest": "/lightweight-charts.4.1.0.js"
+      "src": "/api/klines",
+      "dest": "/api/klines.js"
     },
     {
-      "src": "/signal-monitor\\.js",
+      "src": "/signal-monitor.js",
       "dest": "/signal-monitor.js"
     },
     {
