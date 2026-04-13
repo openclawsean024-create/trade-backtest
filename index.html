@@ -299,7 +299,35 @@
             return { trades, totalReturn, winRate, totalTrades: wins + losses, maxDrawdown, finalCapital: capital, initialCapital, grossProfit, grossLoss, profitFactor, avgHoldTimeSec, sharpeRatio, tradeDrawdowns };
         }
         function buildInsight(strategyResults, bestStrategy, avgReturn, avgWinRate) { const best = strategyResults.find(s => s.name === bestStrategy); return `<strong>最佳策略：</strong>${bestStrategy}<br><strong>平均報酬：</strong>${avgReturn.toFixed(2)}%<br><strong>平均勝率：</strong>${avgWinRate.toFixed(1)}%<br><strong>策略建議：</strong>${avgReturn > 0 ? '目前這組參數有正期望，可再進一步做 walk-forward / fee / slippage 驗證。' : '目前這組參數偏弱，建議調整標的、週期或重新優化進出場條件。'}<br><strong>最終資金（最佳策略）：</strong>$${best?.result.finalCapital.toLocaleString() || '0'}`; }
-        async function runBacktest() { const loading = document.getElementById('loading'); const stats = document.getElementById('stats'); const results = document.getElementById('results'); loading.style.display = 'block'; stats.style.display = 'none'; results.style.display = 'none'; const period = parseInt(document.getElementById('period').value); const symbol = document.getElementById('symbol').value; window._fetchError = null; document.getElementById('retryBtn').style.display = 'none'; let data = await fetchRealData(symbol, period); if (!data || data.length < 50) { console.warn('Real API unavailable, using fallback mock data'); data = generateMockData(period); if (window._fetchError === 'timeout') { updateDataBadge(symbol, 0, 'timeout'); document.getElementById('retryBtn').style.display = 'inline-block'; } else if (window._fetchError === 'fetch_failed') { updateDataBadge(symbol, 0, 'fetch_failed'); } else { updateDataBadge(symbol, data[data.length - 1].close, 'mock'); } } else { updateDataBadge(symbol, data[data.length - 1].close, 'real'); } window._retryBacktest = () => runBacktest(); candleSeries.setData(data);
+        async function runBacktest() {
+            const loading = document.getElementById('loading');
+            const stats = document.getElementById('stats');
+            const results = document.getElementById('results');
+            loading.style.display = 'block';
+            stats.style.display = 'none';
+            results.style.display = 'none';
+            try {
+                const period = parseInt(document.getElementById('period').value);
+                const symbol = document.getElementById('symbol').value;
+                window._fetchError = null;
+                document.getElementById('retryBtn').style.display = 'none';
+                let data = await fetchRealData(symbol, period);
+                if (!data || data.length < 50) {
+                    console.warn('Real API unavailable, using fallback mock data');
+                    data = generateMockData(period);
+                    if (window._fetchError === 'timeout') {
+                        updateDataBadge(symbol, 0, 'timeout');
+                        document.getElementById('retryBtn').style.display = 'inline-block';
+                    } else if (window._fetchError === 'fetch_failed') {
+                        updateDataBadge(symbol, 0, 'fetch_failed');
+                    } else {
+                        updateDataBadge(symbol, data[data.length - 1].close, 'mock');
+                    }
+                } else {
+                    updateDataBadge(symbol, data[data.length - 1].close, 'real');
+                }
+                window._retryBacktest = () => runBacktest();
+                candleSeries.setData(data);
 
             // === RSI pane ===
             const rsiPeriod = parseInt(document.getElementById('rsi-period').value) || 14;
@@ -319,8 +347,8 @@
             })));
 
             // === MA overlay ===
-            if (maLineSeries1) { chart.removeSeries(maLineSeries1); maLineSeries1 = null; }
-            if (maLineSeries2) { chart.removeSeries(maLineSeries2); maLineSeries2 = null; }
+            if (maLineSeries1) { try { chart.removeSeries(maLineSeries1); } catch(e) {} maLineSeries1 = null; }
+            if (maLineSeries2) { try { chart.removeSeries(maLineSeries2); } catch(e) {} maLineSeries2 = null; }
             if (document.getElementById('ma-cross-enable').checked) {
                 const maShort = calculateMA(data, parseInt(document.getElementById('ma-short').value) || 10);
                 const maLong = calculateMA(data, parseInt(document.getElementById('ma-long').value) || 30);
@@ -348,10 +376,10 @@
             // === Trade markers v2: directional arrows with hover tooltip ===
             // addMarkersSeries requires lightweight-charts v5+; guard for v4.x compatibility
             try {
-            if (markerSeries) { chart.removeSeries(markerSeries); markerSeries = null; }
+            if (markerSeries) { try { markerSeries.remove(); } catch(e) {} markerSeries = null; }
             allFlatTrades = [];
             if (strategyResults.length > 0 && typeof chart.addMarkersSeries === 'function') {
-                markerSeries = chart.addMarkersSeries({ color: 'transparent', textColor: '#ffffff', fontSize: 11 });
+                try { markerSeries = chart.addMarkersSeries({ color: 'transparent', textColor: '#ffffff', fontSize: 11 }); } catch(e) { console.warn('addMarkersSeries unavailable:', e.message); markerSeries = null; }
                 const markers = [];
                 strategyResults.forEach(r => {
                     (r.result.trades || []).forEach((trade, tIdx) => {
@@ -454,7 +482,15 @@
             latestSessionPayload = { createdAt: new Date().toISOString(), symbol: document.getElementById('symbol').value, marketType: document.getElementById('marketType').value, timeframe: document.getElementById('timeframe').value, period, initialCapital: parseFloat(document.getElementById('initialCapital').value), bestStrategy, avgReturn, avgWinRate, totalTrades, strategyResults: strategyResults.map(s => ({ name: s.name, totalReturn: s.result.totalReturn, winRate: s.result.winRate, totalTrades: s.result.totalTrades, maxDrawdown: s.result.maxDrawdown, finalCapital: s.result.finalCapital, grossProfit: s.result.grossProfit, grossLoss: s.result.grossLoss, profitFactor: s.result.profitFactor, sharpeRatio: sharpe, avgHoldTimeSec: totalAvgHold, params: s.params, trades: s.result.trades || [] })) };
             latestBacktestData = data;
             latestBacktestSymbol = symbol;
-            loading.style.display = 'none'; stats.style.display = 'grid'; results.style.display = 'block'; }
+            } catch(err) {
+                console.error('runBacktest failed:', err);
+                alert('回測執行失敗：' + err.message);
+            } finally {
+                loading.style.display = 'none';
+                stats.style.display = 'grid';
+                results.style.display = 'block';
+            }
+        }
         function exportGPX(data, symbol) {
             const tf = document.getElementById('timeframe').value;
             let timeMultiplier = 60;
