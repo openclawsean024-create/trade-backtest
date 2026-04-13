@@ -161,6 +161,6 @@ module.exports = async (req, res) => {
     }
   } catch (error) {
     console.error('K-lines error:', error.message);
-    return res.status(500).json({ error: 'Failed: ' + error.message });
+    return res.json({ error: 'Failed: ' + error.message });
   }
 };

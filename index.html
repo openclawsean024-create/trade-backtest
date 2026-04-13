@@ -88,7 +88,7 @@
     </style>
 </head>
 <body>
-    <div class="header"><h1>TradeBacktest</h1><div style="display:flex;align-items:center;gap:10px;"><span id="dataBadge" style="font-size:11px;padding:3px 10px;background:#f3f0ff;color:#7c3aed;border-radius:20px;font-weight:600;">讀取中...</span><div style="color: var(--text-secondary); font-size: 14px;">專業回測系統 v2.3</div></div></div>
+    <div class="header"><h1>TradeBacktest</h1><div style="display:flex;align-items:center;gap:10px;"><span id="dataBadge" style="font-size:11px;padding:3px 10px;background:#f3f0ff;color:#7c3aed;border-radius:20px;font-weight:600;">讀取中...</span><span id="retryBtn" style="display:none;font-size:11px;padding:3px 10px;background:rgba(255,149,0,0.15);color:#ff9500;border-radius:20px;font-weight:600;cursor:pointer;" onclick="window._retryBacktest()">🔄 重試</span><div style="color: var(--text-secondary); font-size: 14px;">專業回測系統 v2.3</div></div></div>
     <div class="container">
         <div class="grid">
             <div class="sidebar">
@@ -198,7 +198,10 @@
             const interval = tfMap[document.getElementById('timeframe').value] || '1d';
             try {
                 const url = `/api/klines?symbol=${encodeURIComponent(symbol)}&days=${days}&interval=${encodeURIComponent(interval)}`;
-                const res = await fetch(url);
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 10000);
+                const res = await fetch(url, { signal: controller.signal });
+                clearTimeout(timeoutId);
                 if (!res.ok) throw new Error(`K-lines API error: ${res.status}`);
                 const json = await res.json();
                 if (!json.success || !json.data || json.data.length < 10) {
@@ -206,7 +209,9 @@
                 }
                 return json.data;
             } catch(e) {
-                console.warn('Real data fetch failed, using fallback:', e.message);
+                console.warn('Real data fetch failed:', e.message);
+                const isTimeout = e.name === 'AbortError' || e.message.includes('aborted');
+                window._fetchError = isTimeout ? 'timeout' : 'fetch_failed';
                 return null;
             }
         }
@@ -234,6 +239,14 @@
                 badge.textContent = `⏳ ${symbol} $${displayPrice} (載入中...)`;
                 badge.style.background = 'rgba(0,113,227,0.12)';
                 badge.style.color = '#0071e3';
+            } else if (source === 'fetch_failed') {
+                badge.textContent = `❌ 資料取得失敗`;
+                badge.style.background = 'rgba(255,59,48,0.15)';
+                badge.style.color = '#ff3b30';
+            } else if (source === 'timeout') {
+                badge.textContent = `⏰ 載入超時`;
+                badge.style.background = 'rgba(255,149,0,0.15)';
+                badge.style.color = '#ff9500';
             } else {
                 badge.textContent = `✅ 真實數據 | ${symbol} $${displayPrice}`;
                 badge.style.background = 'rgba(52,199,89,0.15)';
@@ -286,7 +299,7 @@
             return { trades, totalReturn, winRate, totalTrades: wins + losses, maxDrawdown, finalCapital: capital, initialCapital, grossProfit, grossLoss, profitFactor, avgHoldTimeSec, sharpeRatio, tradeDrawdowns };
         }
         function buildInsight(strategyResults, bestStrategy, avgReturn, avgWinRate) { const best = strategyResults.find(s => s.name === bestStrategy); return `<strong>最佳策略：</strong>${bestStrategy}<br><strong>平均報酬：</strong>${avgReturn.toFixed(2)}%<br><strong>平均勝率：</strong>${avgWinRate.toFixed(1)}%<br><strong>策略建議：</strong>${avgReturn > 0 ? '目前這組參數有正期望，可再進一步做 walk-forward / fee / slippage 驗證。' : '目前這組參數偏弱，建議調整標的、週期或重新優化進出場條件。'}<br><strong>最終資金（最佳策略）：</strong>$${best?.result.finalCapital.toLocaleString() || '0'}`; }
-        async function runBacktest() { const loading = document.getElementById('loading'); const stats = document.getElementById('stats'); const results = document.getElementById('results'); loading.style.display = 'block'; stats.style.display = 'none'; results.style.display = 'none'; const period = parseInt(document.getElementById('period').value); const symbol = document.getElementById('symbol').value; let data = await fetchRealData(symbol, period); if (!data || data.length < 50) { console.warn('Real API unavailable, using fallback mock data'); data = generateMockData(period); updateDataBadge(symbol, data[data.length - 1].close, 'mock'); } else { updateDataBadge(symbol, data[data.length - 1].close, 'real'); } candleSeries.setData(data);
+        async function runBacktest() { const loading = document.getElementById('loading'); const stats = document.getElementById('stats'); const results = document.getElementById('results'); loading.style.display = 'block'; stats.style.display = 'none'; results.style.display = 'none'; const period = parseInt(document.getElementById('period').value); const symbol = document.getElementById('symbol').value; window._fetchError = null; document.getElementById('retryBtn').style.display = 'none'; let data = await fetchRealData(symbol, period); if (!data || data.length < 50) { console.warn('Real API unavailable, using fallback mock data'); data = generateMockData(period); if (window._fetchError === 'timeout') { updateDataBadge(symbol, 0, 'timeout'); document.getElementById('retryBtn').style.display = 'inline-block'; } else if (window._fetchError === 'fetch_failed') { updateDataBadge(symbol, 0, 'fetch_failed'); } else { updateDataBadge(symbol, data[data.length - 1].close, 'mock'); } } else { updateDataBadge(symbol, data[data.length - 1].close, 'real'); } window._retryBacktest = () => runBacktest(); candleSeries.setData(data);
 
             // === RSI pane ===
             const rsiPeriod = parseInt(document.getElementById('rsi-period').value) || 14;
