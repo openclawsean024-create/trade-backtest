@@ -155,6 +155,36 @@ module.exports = async (req, res) => {
       return res.status(200).json({ success: true, symbol, interval, data, source: 'binance', count: data.length });
     }
 
+
+    // Yahoo Finance fallback for crypto (when Binance is unavailable or returns no data)
+    try {
+      const yfSymbol = symbol.replace('USDT', '-USD');
+      const end = Math.floor(Date.now() / 1000);
+      const yfStart = end - days * 86400;
+      const yfInterval = { '1m': '1m', '5m': '5m', '15m': '15m', '1h': '1h', '4h': '4h', '1d': '1d', '1w': '1wk' }[interval] || '1d';
+      const yfUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${yfSymbol}?period1=${yfStart}&period2=${end}&interval=${yfInterval}`;
+      const yfRes = await fetch(yfUrl, { headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json', 'Referer': 'https://finance.yahoo.com/' }, signal: AbortSignal.timeout(10000) });
+      if (yfRes.ok) {
+        const yfJson = await yfRes.json();
+        const yfResult = yfJson?.chart?.result?.[0];
+        if (yfResult) {
+          const ts = yfResult.timestamp || [];
+          const closes = yfResult.indicators?.quote?.[0]?.close || [];
+          const opens = yfResult.indicators?.quote?.[0]?.open || [];
+          const highs = yfResult.indicators?.quote?.[0]?.high || [];
+          const lows = yfResult.indicators?.quote?.[0]?.low || [];
+          const volumes = yfResult.indicators?.quote?.[0]?.volume || [];
+          const raw = ts.map((t, i) => ({ time: t, open: opens[i], high: highs[i], low: lows[i], close: closes[i], volume: volumes[i] || 0 }));
+          const yfData = sanitizeAndValidate(raw);
+          if (yfData.length >= 2) {
+            return res.status(200).json({ success: true, symbol, interval, data: yfData, source: 'yahoo', count: yfData.length });
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Yahoo Finance fallback error:', e.message);
+    }
+
     // CoinGecko fallback for non-standard intervals or long periods
     const coinId = coinGeckoIds[symbol];
     if (!coinId) {
