@@ -1,9 +1,9 @@
-// K-lines API: proxies CoinGecko / Binance / Yahoo Finance for OHLCV data
+// K-lines API: proxies CoinGecko / Yahoo Finance for OHLCV data
 // Handles CORS by running server-side on Vercel
 //
 // Data source priority for crypto:
 //   1d/1w  → CoinGecko (free, reliable, no API key)
-//   1m/5m/15m/1h/4h → Binance (with CoinGecko as fallback)
+//   1m/5m/15m/1h/4h → Yahoo Finance (replaces Binance, no API key needed)
 //   Stocks → Yahoo Finance
 //
 // CoinGecko OHLC endpoint: /coins/{id}/ohlc?vs_currency=usd&days=N
@@ -224,15 +224,16 @@ module.exports = async (req, res) => {
       }
     }
 
-    // ── Secondary: Binance (for intraday: 1m/5m/15m/1h/4h) ───────────────────
-    const binanceIntervals = ['1m', '5m', '15m', '1h', '4h'];
-    if (binanceIntervals.includes(interval)) {
+    // ── Secondary: Yahoo Finance (for intraday: 1m/5m/15m/1h/4h) ───────────────────
+    const intradayIntervals = ['1m', '5m', '15m', '1h', '4h'];
+    if (intradayIntervals.includes(interval)) {
       try {
-        const data = await fetchBinance(symbol, interval, days);
-        return res.status(200).json({ success: true, symbol, interval, data, source: 'binance', count: data.length });
-      } catch (bnErr) {
-        console.warn(`Binance failed for ${symbol}: ${bnErr.message}`);
-        // fall through to Yahoo fallback
+        // Yahoo Finance supports BTC-USD, ETH-USD etc. with intraday data
+        // fetchYahoo handles USDT->USD conversion internally
+        const data = await fetchYahoo(symbol, interval, days);
+        return res.status(200).json({ success: true, symbol, interval, data, source: 'yahoo', count: data.length });
+      } catch (yfErr) {
+        console.warn(`Yahoo Finance intraday failed for ${symbol}: ${yfErr.message}`);
       }
     }
 
