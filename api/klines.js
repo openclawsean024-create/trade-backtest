@@ -1,3 +1,30 @@
+// Validate a single OHLCV candle for data integrity
+// Returns true only if all integrity checks pass
+function isValidCandle(candle) {
+  // Price must be positive
+  if (!candle.open || !candle.high || !candle.low || !candle.close) return false;
+  if (candle.open <= 0 || candle.high <= 0 || candle.low <= 0 || candle.close <= 0) return false;
+  // OHLC logic: High >= max(O,C,L), Low <= min(O,C,L)
+  if (candle.high < Math.max(candle.open, candle.close, candle.low)) return false;
+  if (candle.low > Math.min(candle.open, candle.close, candle.high)) return false;
+  // Volume must be non-negative
+  if (candle.volume < 0) return false;
+  return true;
+}
+
+// Filter + validate all candles, ensure timestamps are strictly increasing
+function sanitizeAndValidate(rawData) {
+  let prevTime = 0;
+  return rawData
+    .filter(c => {
+      if (!isValidCandle(c)) return false;
+      // Timestamp must be strictly increasing
+      if (c.time <= prevTime) return false;
+      prevTime = c.time;
+      return true;
+    });
+}
+
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -85,7 +112,7 @@ module.exports = async (req, res) => {
           throw new Error('No Binance data for ' + symbol + ' (interval=' + interval + ')');
         }
 
-        const data = allKlines
+        const raw = allKlines
           .map(k => ({
             time: Math.floor(k[0] / 1000),
             open: parseFloat(k[1]),
@@ -96,6 +123,9 @@ module.exports = async (req, res) => {
           }))
           .filter(d => d.time >= startSec && d.time <= nowSec)
           .sort((a, b) => a.time - b.time);
+
+        const data = sanitizeAndValidate(raw);
+        if (data.length === 0) throw new Error('No valid Binance candles after validation for ' + symbol);
 
         return res.status(200).json({ success: true, symbol, interval, data, source: 'binance' });
       }
@@ -128,7 +158,9 @@ module.exports = async (req, res) => {
         const seen = new Set();
         yearChunks.sort((a, b) => a[0] - b[0]);
         const unique = yearChunks.filter(k => { if (seen.has(k[0])) return false; seen.add(k[0]); return true; });
-        const data = unique.map(k => ({ time: Math.floor(k[0] / 1000), open: k[1], high: k[2], low: k[3], close: k[4], volume: 0 })).filter(d => d.time >= start && d.time <= end);
+        const rawData = unique.map(k => ({ time: Math.floor(k[0] / 1000), open: k[1], high: k[2], low: k[3], close: k[4], volume: 0 })).filter(d => d.time >= start && d.time <= end);
+        const data = sanitizeAndValidate(rawData);
+        if (data.length === 0) throw new Error('No valid CoinGecko candles after validation for ' + symbol);
         return res.status(200).json({ success: true, symbol, interval, data, source: 'coingecko' });
       } else {
         const cgUrl = `https://api.coingecko.com/api/v3/coins/${coinId}/ohlc?vs_currency=usd&days=${days}`;
@@ -136,7 +168,9 @@ module.exports = async (req, res) => {
         if (!response.ok) throw new Error(`CoinGecko API error: ${response.status}`);
         const ohlc = await response.json();
         if (!Array.isArray(ohlc) || ohlc.length === 0) throw new Error('No CoinGecko data for ' + symbol);
-        const data = ohlc.map(k => ({ time: Math.floor(k[0] / 1000), open: k[1], high: k[2], low: k[3], close: k[4], volume: 0 }));
+        const rawData = ohlc.map(k => ({ time: Math.floor(k[0] / 1000), open: k[1], high: k[2], low: k[3], close: k[4], volume: 0 }));
+        const data = sanitizeAndValidate(rawData);
+        if (data.length === 0) throw new Error('No valid CoinGecko candles after validation for ' + symbol);
         return res.status(200).json({ success: true, symbol, interval, data, source: 'coingecko' });
       }
     } else {
@@ -156,7 +190,9 @@ module.exports = async (req, res) => {
       const highs = result.indicators?.quote?.[0]?.high || [];
       const lows = result.indicators?.quote?.[0]?.low || [];
       const volumes = result.indicators?.quote?.[0]?.volume || [];
-      const data = timestamps.map((t, i) => ({ time: t, open: opens[i]||0, high: highs[i]||0, low: lows[i]||0, close: closes[i]||0, volume: volumes[i]||0 })).filter(d => d.close > 0);
+      const raw = timestamps.map((t, i) => ({ time: t, open: opens[i], high: highs[i], low: lows[i], close: closes[i], volume: volumes[i] || 0 }));
+      const data = sanitizeAndValidate(raw);
+      if (data.length === 0) throw new Error('No valid Yahoo Finance candles after validation for ' + symbol);
       return res.status(200).json({ success: true, symbol, interval, data, source: 'yahoo' });
     }
   } catch (error) {

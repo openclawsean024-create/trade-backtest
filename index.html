@@ -254,7 +254,7 @@
             }
         }
         
-        function generateMockData(days) { const data = []; const symbol = document.getElementById('symbol').value; let price = startPrices[symbol] || 1000; const now = new Date(); for (let i = days; i >= 0; i--) { const time = new Date(now); time.setDate(time.getDate() - i); const timeUnix = Math.floor(time.getTime() / 1000); const volatility = 0.025; const trend = Math.sin(i / 30) * 0.01; const change = (Math.random() - 0.5) * 2 * volatility + trend; const open = price; const close = price * (1 + change); const high = Math.max(open, close) * (1 + Math.random() * 0.015); const low = Math.min(open, close) * (1 - Math.random() * 0.015); const volume = Math.random() * 1000000 + 500000; data.push({ time: timeUnix, open, high, low, close, volume }); price = close; } return data; }
+        // Removed: generateMockData() — only real market data is used
         function calculateMA(data, period) { const ma = []; for (let i = 0; i < data.length; i++) { if (i < period - 1) ma.push(null); else { let sum = 0; for (let j = 0; j < period; j++) sum += data[i - j].close; ma.push(sum / period); } } return ma; }
         function calculateRSI(data, period) { const rsi = []; let gains = 0, losses = 0; for (let i = 1; i < data.length; i++) { const change = data[i].close - data[i-1].close; if (change > 0) gains += change; else losses += Math.abs(change); if (i < period) rsi.push(null); else { const avgGain = gains / period; const avgLoss = losses / period; const rs = avgLoss === 0 ? 100 : avgGain / avgLoss; rsi.push(100 - (100 / (1 + rs))); gains = gains * (period - 1) / period; losses = losses * (period - 1) / period; } } return rsi; }
         function calculateMACD(data, fast, slow, signal) { const ema = (arr, period) => { const k = 2 / (period + 1); const result = [arr[0]]; for (let i = 1; i < arr.length; i++) result.push(arr[i] * k + result[i-1] * (1 - k)); return result; }; const closes = data.map(d => d.close); const fastEMA = ema(closes, fast); const slowEMA = ema(closes, slow); const macdLine = fastEMA.map((f, i) => f - slowEMA[i]); const signalLine = ema(macdLine, signal); const histogram = macdLine.map((m, i) => m - signalLine[i]); return { macdLine, signalLine, histogram }; }
@@ -313,16 +313,9 @@
                 document.getElementById('retryBtn').style.display = 'none';
                 let data = await fetchRealData(symbol, period);
                 if (!data || data.length < 50) {
-                    console.warn('Real API unavailable, using fallback mock data');
-                    data = generateMockData(period);
-                    if (window._fetchError === 'timeout') {
-                        updateDataBadge(symbol, 0, 'timeout');
-                        document.getElementById('retryBtn').style.display = 'inline-block';
-                    } else if (window._fetchError === 'fetch_failed') {
-                        updateDataBadge(symbol, 0, 'fetch_failed');
-                    } else {
-                        updateDataBadge(symbol, data[data.length - 1].close, 'mock');
-                    }
+                    updateDataBadge(symbol, 0, 'fetch_failed');
+                    document.getElementById('retryBtn').style.display = 'inline-block';
+                    throw new Error('無法取得市場數據，請稍後重試或更換標的');
                 } else {
                     updateDataBadge(symbol, data[data.length - 1].close, 'real');
                 }
