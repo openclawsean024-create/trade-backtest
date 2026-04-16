@@ -300,7 +300,6 @@ module.exports = async (req, res) => {
   // ── CRYPTO ──────────────────────────────────────────────────────────────────
   if (isCrypto) {
     const coinId = COINGECKO_IDS[symbol];
-    const isIntradayInterval = ['1m', '5m', '15m', '1h', '4h'].includes(interval);
     const isLongPeriod = days > 90;
 
     // ── Primary: Binance (reliable for ALL crypto periods, free, no API key) ───
