@@ -100,9 +100,87 @@ function CoinChart({ coinId, coinName }: { coinId: string; coinName: string }) {
 }
 
 export default function Home() {
-  const [symbol, setSymbol] = useState('BTC');
-  const [btcLoaded, setBtcLoaded] = useState(false);
-  const [ethLoaded, setEthLoaded] = useState(false);
+  const [symbol, setSymbol] = useState('bitcoin'); // 'bitcoin' | 'ethereum'
+  const [chartData, setChartData] = useState<CandlestickData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const containerRef = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<any>(null);
+  const seriesRef = useRef<any>(null);
+
+  const COIN_MAP: Record<string, { id: string; name: string; color: string }> = {
+    bitcoin: { id: 'bitcoin', name: '比特幣 BTC', color: '#f7931a' },
+    ethereum: { id: 'ethereum', name: '以太幣 ETH', color: '#627eea' },
+  };
+
+  useEffect(() => {
+    let mounted = true;
+    let resizeObserver: ResizeObserver | null = null;
+    (async () => {
+      setLoading(true);
+      setError('');
+      try {
+        const data = await fetchOHLC(symbol, 30);
+        if (!mounted) return;
+        setChartData(data);
+
+        // Destroy old chart if exists
+        if (chartRef.current) {
+          chartRef.current.remove();
+          chartRef.current = null;
+          seriesRef.current = null;
+        }
+
+        if (!containerRef.current) return;
+        const TradingChart = await loadTradingChart();
+        if (!mounted || !containerRef.current) return;
+
+        const chart = TradingChart.createChart(containerRef.current, {
+          layout: { background: { type: TradingChart.ColorType.Solid, color: '#0d1117' }, textColor: '#e6edf3' },
+          grid: { vertLines: { color: '#21262d' }, horzLines: { color: '#21262d' } },
+          crosshair: { mode: TradingChart.CrosshairMode.Normal },
+          timeScale: { borderColor: '#30363d', timeVisible: true },
+          rightPriceScale: { borderColor: '#30363d' },
+          width: containerRef.current.clientWidth,
+          height: 400,
+        });
+
+        const series = chart.addCandlestickSeries({
+          upColor: '#26a69a',
+          downColor: '#ef5350',
+          borderDownColor: '#ef5350',
+          borderUpColor: '#26a69a',
+          wickDownColor: '#ef5350',
+          wickUpColor: '#26a69a',
+        });
+
+        chartRef.current = chart;
+        seriesRef.current = series;
+        series.setData(data);
+        chart.timeScale().fitContent();
+
+        resizeObserver = new ResizeObserver(() => {
+          if (containerRef.current && chartRef.current) {
+            chartRef.current.applyOptions({ width: containerRef.current.clientWidth });
+          }
+        });
+        resizeObserver.observe(containerRef.current);
+        setLoading(false);
+      } catch (e: any) {
+        if (mounted) setError(e.message);
+      }
+    })();
+    return () => {
+      mounted = false;
+      if (resizeObserver) resizeObserver.disconnect();
+      if (chartRef.current) {
+        chartRef.current.remove();
+        chartRef.current = null;
+      }
+    };
+  }, [symbol]);
+
+  const coin = COIN_MAP[symbol];
 
   return (
     <div style={{ minHeight: '100vh', background: '#010409', color: '#e6edf3', padding: '2rem', fontFamily: 'system-ui, sans-serif' }}>
@@ -112,16 +190,32 @@ export default function Home() {
       </header>
 
       <section>
-        <h2 style={{ fontSize: '1.2rem', marginBottom: '1rem' }}>比特幣 / 以太幣 K 線圖（近30天）</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '1.5rem' }}>
-          <div style={{ background: '#161b22', borderRadius: '8px', padding: '1rem', border: '1px solid #30363d' }}>
-            <h3 style={{ margin: '0 0 0.5rem', color: '#f7931a' }}>Bitcoin (BTC)</h3>
-            <CoinChart coinId="bitcoin" coinName="比特幣 BTC" />
-          </div>
-          <div style={{ background: '#161b22', borderRadius: '8px', padding: '1rem', border: '1px solid #30363d' }}>
-            <h3 style={{ margin: '0 0 0.5rem', color: '#627eea' }}>Ethereum (ETH)</h3>
-            <CoinChart coinId="ethereum" coinName="以太幣 ETH" />
-          </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
+          <h2 style={{ fontSize: '1.2rem', margin: 0 }}>K 線圖（近30天）</h2>
+          <select
+            value={symbol}
+            onChange={e => setSymbol(e.target.value)}
+            style={{
+              background: '#161b22',
+              color: '#e6edf3',
+              border: '1px solid #30363d',
+              borderRadius: '6px',
+              padding: '0.4rem 0.75rem',
+              fontSize: '0.9rem',
+              cursor: 'pointer',
+            }}
+          >
+            <option value="bitcoin">比特幣 (BTC)</option>
+            <option value="ethereum">以太幣 (ETH)</option>
+          </select>
+        </div>
+
+        <div style={{ background: '#161b22', borderRadius: '8px', padding: '1rem', border: '1px solid #30363d', maxWidth: 800 }}>
+          <h3 style={{ margin: '0 0 1rem', color: coin.color }}>{coin.name}</h3>
+          {loading && <p style={{ color: '#8b949e' }}>載入 K 線圖...</p>}
+          {error && <p style={{ color: '#f85149' }}>錯誤：{error}</p>}
+          {!loading && !error && chartData.length === 0 && <p style={{ color: '#8b949e' }}>無資料</p>}
+          <div ref={containerRef} style={{ borderRadius: '8px', overflow: 'hidden', border: '1px solid #30363d' }} />
         </div>
       </section>
     </div>
