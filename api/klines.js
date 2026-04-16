@@ -300,14 +300,13 @@ module.exports = async (req, res) => {
   // ── CRYPTO ──────────────────────────────────────────────────────────────────
   if (isCrypto) {
     const coinId = COINGECKO_IDS[symbol];
-    const isLongPeriod = days > 90;
 
     // ── Primary: Binance (reliable for ALL crypto periods, free, no API key) ───
     // Binance has complete historical data via pagination (1500 candles/call)
     // Use retry logic to handle rate limits.
     try {
       const data = await fetchBinanceWithRetry(symbol, interval, days);
-      if (data && plausiblePriceRange(symbol, data)) {
+      if (data && data.length >= 2 && plausiblePriceRange(symbol, data)) {
         return res.status(200).json({ success: true, symbol, interval, data, source: 'binance', count: data.length });
       }
       if (data) {
@@ -317,28 +316,38 @@ module.exports = async (req, res) => {
       console.warn(`Binance failed for ${symbol} (${interval}): ${bnErr.message}`);
     }
 
-    // ── CoinGecko fallback: only for short periods (≤90 days) where it gives daily candles ──
-    if (coinId && !isLongPeriod) {
+    // ── Yahoo Finance fallback: reliable for crypto 1d/1w at any period ─────────
+    // CoinGecko is skipped for 1d/1w because its /ohlc endpoint returns 4h candles
+    // (not 1d) for periods ≤90 days, which is wrong granularity for a "1d" chart.
+    const isIntradayInterval = ['1m', '5m', '15m', '1h', '4h'].includes(interval);
+    if (!isIntradayInterval) {
+      try {
+        const data = await fetchYahoo(symbol, interval, days);
+        if (plausiblePriceRange(symbol, data)) {
+          return res.status(200).json({ success: true, symbol, interval, data, source: 'yahoo', count: data.length });
+        }
+        console.warn(`Yahoo Finance sanity check failed for ${symbol}; trying CoinGecko`);
+      } catch (yfErr) {
+        console.warn(`Yahoo Finance failed for ${symbol}: ${yfErr.message}`);
+      }
+    }
+
+    // ── Last resort: CoinGecko (only for intraday or when Yahoo Finance also failed) ──
+    // NOTE: CoinGecko's /ohlc endpoint returns:
+    //   days 1-90   → 4h candles  (NOT daily, wrong for 1d chart)
+    //   days 91-365 → weekly      (NOT daily, wrong for 1d chart)
+    //   days 366+   → monthly     (NOT daily, wrong for 1d chart)
+    // Only use CoinGecko as absolute last resort.
+    if (coinId) {
       try {
         const data = await fetchCoinGecko(coinId, days);
         if (plausiblePriceRange(symbol, data)) {
           return res.status(200).json({ success: true, symbol, interval, data, source: 'coingecko', count: data.length });
         }
-        console.warn(`CoinGecko sanity check failed for ${symbol}; trying Yahoo Finance`);
+        console.warn(`CoinGecko sanity check failed for ${symbol}`);
       } catch (cgErr) {
         console.warn(`CoinGecko failed for ${symbol}: ${cgErr.message}`);
       }
-    }
-
-    // ── Last resort: Yahoo Finance ─────────────────────────────────────────────
-    try {
-      const data = await fetchYahoo(symbol, interval, days);
-      if (plausiblePriceRange(symbol, data)) {
-        return res.status(200).json({ success: true, symbol, interval, data, source: 'yahoo', count: data.length });
-      }
-      console.warn(`Yahoo Finance sanity check failed for ${symbol}`);
-    } catch (yfErr) {
-      console.warn(`Yahoo Finance failed for ${symbol} (${interval}): ${yfErr.message}`);
     }
 
     return res.status(200).json({ success: false, error: `All data sources failed for ${symbol} (${interval}). Please try again later.` });
