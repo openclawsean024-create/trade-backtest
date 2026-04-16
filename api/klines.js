@@ -316,29 +316,25 @@ module.exports = async (req, res) => {
       console.warn(`Binance failed for ${symbol} (${interval}): ${bnErr.message}`);
     }
 
-    // ── Yahoo Finance fallback: reliable for crypto 1d/1w at any period ─────────
-    // CoinGecko is skipped for 1d/1w because its /ohlc endpoint returns 4h candles
-    // (not 1d) for periods ≤90 days, which is wrong granularity for a "1d" chart.
-    const isIntradayInterval = ['1m', '5m', '15m', '1h', '4h'].includes(interval);
-    if (!isIntradayInterval) {
-      try {
-        const data = await fetchYahoo(symbol, interval, days);
-        if (plausiblePriceRange(symbol, data)) {
-          return res.status(200).json({ success: true, symbol, interval, data, source: 'yahoo', count: data.length });
-        }
-        console.warn(`Yahoo Finance sanity check failed for ${symbol}; trying CoinGecko`);
-      } catch (yfErr) {
-        console.warn(`Yahoo Finance failed for ${symbol}: ${yfErr.message}`);
+    // ── Yahoo Finance: reliable for all intervals and periods ────────────
+    const isLongPeriod = days > 90;
+    try {
+      const data = await fetchYahoo(symbol, interval, days);
+      if (plausiblePriceRange(symbol, data)) {
+        return res.status(200).json({ success: true, symbol, interval, data, source: 'yahoo', count: data.length });
       }
+      console.warn(`Yahoo Finance sanity check failed for ${symbol}`);
+    } catch (yfErr) {
+      console.warn(`Yahoo Finance failed for ${symbol}: ${yfErr.message}`);
     }
 
-    // ── Last resort: CoinGecko (only for intraday or when Yahoo Finance also failed) ──
-    // NOTE: CoinGecko's /ohlc endpoint returns:
-    //   days 1-90   → 4h candles  (NOT daily, wrong for 1d chart)
-    //   days 91-365 → weekly      (NOT daily, wrong for 1d chart)
-    //   days 366+   → monthly     (NOT daily, wrong for 1d chart)
-    // Only use CoinGecko as absolute last resort.
-    if (coinId) {
+    // ── Last resort: CoinGecko (only when days ≤ 90, where it gives daily candles) ──
+    // CoinGecko's /ohlc endpoint returns:
+    //   days 1-90   → daily candles ✓
+    //   days 91-365 → weekly candles ✗ (wrong granularity)
+    //   days 366+   → monthly candles ✗ (wrong granularity)
+    // → Skip CoinGecko when period > 90 to avoid wrong-granularity data.
+    if (coinId && !isLongPeriod) {
       try {
         const data = await fetchCoinGecko(coinId, days);
         if (plausiblePriceRange(symbol, data)) {
