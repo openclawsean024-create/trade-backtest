@@ -81,30 +81,52 @@ async function fetchBinance(symbol, interval, days) {
   let allKlines = [];
   let endTimeMs = Math.floor(Date.now());
   let consecutiveEmpty = 0;
+  let rateLimitRetries = 0;
+  const MAX_RATE_LIMIT_RETRIES = 4;
+  const BASE_DELAY_MS = 500;
 
   for (let i = 0; i < 50; i++) {
+    // On rate-limit, respect Retry-After header (fallback to exponential backoff)
+    let delayMs = BASE_DELAY_MS * Math.pow(2, rateLimitRetries);
     const bnUrl = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}&endTime=${endTimeMs}`;
     let r;
     try {
       r = await fetch(bnUrl, {
         headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' },
-        signal: AbortSignal.timeout(10000),
+        signal: AbortSignal.timeout(15000),
       });
     } catch (e) {
       console.error('Binance fetch error:', e.message);
       consecutiveEmpty++;
-      if (consecutiveEmpty >= 2) break;
-      await sleep(500);
+      if (consecutiveEmpty >= 3) break;
+      await sleep(delayMs);
+      continue;
+    }
+
+    // Handle rate limiting with Retry-After support
+    if (r.status === 429) {
+      rateLimitRetries++;
+      if (rateLimitRetries > MAX_RATE_LIMIT_RETRIES) {
+        throw new Error(`Binance rate limit exceeded for ${symbol} (${interval}) after ${MAX_RATE_LIMIT_RETRIES} retries`);
+      }
+      const retryAfter = parseInt(r.headers.get('Retry-After') || '');
+      delayMs = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : delayMs * 2;
+      console.warn(`Binance 429 received, retry ${rateLimitRetries}/${MAX_RATE_LIMIT_RETRIES} after ${delayMs}ms`);
+      await sleep(delayMs);
       continue;
     }
 
     if (!r.ok) {
       const errBody = await r.text().catch(() => '');
-      console.error(`Binance HTTP ${r.status}: ${errBody.slice(0, 100)}`);
-      consecutiveEmpty++;
-      if (consecutiveEmpty >= 2) break;
-      await sleep(1000);
-      continue;
+      console.error(`Binance HTTP ${r.status}: ${errBody.slice(0, 200)}`);
+      // 5xx errors — retry with backoff
+      if (r.status >= 500) {
+        consecutiveEmpty++;
+        if (consecutiveEmpty >= 3) break;
+        await sleep(delayMs * 2);
+        continue;
+      }
+      throw new Error(`Binance API error for ${symbol}: HTTP ${r.status} — ${errBody.slice(0, 100)}`);
     }
 
     let klines;
@@ -112,17 +134,26 @@ async function fetchBinance(symbol, interval, days) {
       klines = await r.json();
     } catch (e) {
       console.error('Binance JSON parse error:', e.message);
-      break;
+      throw new Error(`Binance JSON parse error for ${symbol}: ${e.message}`);
     }
 
-    if (!Array.isArray(klines) || klines.length === 0) {
+    if (!Array.isArray(klines)) {
+      throw new Error(`Binance returned non-array response for ${symbol}: ${JSON.stringify(klines).slice(0, 100)}`);
+    }
+
+    if (klines.length === 0) {
       consecutiveEmpty++;
-      if (consecutiveEmpty >= 2) break;
-      await sleep(500);
+      if (consecutiveEmpty >= 3) {
+        // No more data available
+        break;
+      }
+      await sleep(300);
       continue;
     }
 
+    // Reset consecutive-empty counter on success
     consecutiveEmpty = 0;
+    rateLimitRetries = 0;
     allKlines.push(...klines);
 
     if (klines.length < limit) break;
@@ -132,10 +163,12 @@ async function fetchBinance(symbol, interval, days) {
     endTimeMs = (oldestOpenSec - 1) * 1000;
     if (endTimeMs <= 0) break;
 
-    await sleep(200);
+    await sleep(250);
   }
 
-  if (allKlines.length === 0) throw new Error(`No Binance data for ${symbol} (${interval})`);
+  if (allKlines.length === 0) {
+    throw new Error(`No Binance data for ${symbol} (${interval}) — all sources returned empty`);
+  }
 
   const raw = allKlines
     .map(k => ({
