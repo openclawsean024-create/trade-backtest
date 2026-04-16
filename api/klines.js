@@ -36,6 +36,11 @@ function sleep(ms) {
 }
 
 // ── CoinGecko ──────────────────────────────────────────────────────────────────
+// NOTE: CoinGecko's /ohlc endpoint returns:
+//   days 1-90   → daily candles  ✓ safe to use
+//   days 91-365 → weekly candles ✗ wrong granularity for 1d chart
+//   days 366+   → monthly candles ✗ wrong granularity for 1d chart
+// → Only use CoinGecko as fallback for 1d/1w when period ≤ 90, otherwise skip it.
 const COINGECKO_IDS = {
   'BTCUSDT': 'bitcoin',
   'ETHUSDT': 'ethereum',
@@ -46,6 +51,22 @@ const COINGECKO_IDS = {
   'ADAUSDT': 'cardano',
   'AVAXUSDT': 'avalanche-2',
 };
+
+// Symbol price sanity-check: guard against wrong-asset data
+// Returns true if the median close price is plausible for the given symbol
+function plausiblePriceRange(symbol, candles) {
+  if (!candles || candles.length === 0) return true;
+  const median = candles.slice().sort((a, b) => a.close - b.close)[Math.floor(candles.length / 2)].close;
+  const ranges = {
+    'BTCUSDT': [500, 250000], 'ETHUSDT': [10, 20000], 'BNBUSDT': [5, 2000],
+    'SOLUSDT': [0.5, 2000], 'XRPUSDT': [0.01, 20], 'DOGEUSDT': [0.001, 5],
+    'ADAUSDT': [0.01, 10], 'AVAXUSDT': [0.5, 500],
+    // Stocks: wide range, skip check
+  };
+  const range = ranges[symbol];
+  if (!range) return true;
+  return median >= range[0] && median <= range[1];
+}
 
 async function fetchCoinGecko(coinId, days) {
   // days 1-90: daily | 91-365: weekly | 366+: monthly
@@ -245,40 +266,50 @@ module.exports = async (req, res) => {
   // ── CRYPTO ──────────────────────────────────────────────────────────────────
   if (isCrypto) {
     const coinId = COINGECKO_IDS[symbol];
+    const longPeriodIntervals = ['1d', '1w'];
+    const isLongPeriod = days > 90;
 
-    // ── Primary: CoinGecko (best for 1d / long periods, free, no rate limits) ──
-    if (coinId) {
-      try {
-        const data = await fetchCoinGecko(coinId, days);
-        return res.status(200).json({ success: true, symbol, interval, data, source: 'coingecko', count: data.length });
-      } catch (cgErr) {
-        console.warn(`CoinGecko failed for ${symbol}: ${cgErr.message}`);
-        // fall through to Binance below
-      }
-    }
-
-    // ── Secondary: Yahoo Finance (for intraday: 1m/5m/15m/1h/4h) ───────────────────
-    const intradayIntervals = ['1m', '5m', '15m', '1h', '4h'];
-    if (intradayIntervals.includes(interval)) {
-      try {
-        // Yahoo Finance supports BTC-USD, ETH-USD etc. with intraday data
-        // fetchYahoo handles USDT->USD conversion internally
-        const data = await fetchYahoo(symbol, interval, days);
-        return res.status(200).json({ success: true, symbol, interval, data, source: 'yahoo', count: data.length });
-      } catch (yfErr) {
-        console.warn(`Yahoo Finance intraday failed for ${symbol}: ${yfErr.message}`);
-      }
-    }
-
-    // ── Tertiary: Yahoo Finance fallback ─────────────────────────────────────
+    // ── Primary: Yahoo Finance (reliable daily candles for ANY period) ─────────
+    // CoinGecko changes granularity on long periods (weekly/monthly) — skip it
+    // when we need daily data and the period is long.
     try {
       const data = await fetchYahoo(symbol, interval, days);
-      return res.status(200).json({ success: true, symbol, interval, data, source: 'yahoo', count: data.length });
+      if (!plausiblePriceRange(symbol, data)) {
+        console.warn(`Yahoo Finance sanity check failed for ${symbol}; trying fallback`);
+      } else {
+        return res.status(200).json({ success: true, symbol, interval, data, source: 'yahoo', count: data.length });
+      }
     } catch (yfErr) {
-      console.warn(`Yahoo Finance fallback failed for ${symbol}: ${yfErr.message}`);
+      console.warn(`Yahoo Finance failed for ${symbol} (${interval}): ${yfErr.message}`);
     }
 
-    // ── All sources exhausted ─────────────────────────────────────────────────
+    // ── CoinGecko fallback: only for short periods (≤90 days) where it gives daily candles ──
+    if (coinId && isLongPeriodIntervals.includes(interval) && isLongPeriod) {
+      // Skip CoinGecko — it would return weekly/monthly candles for this period
+      console.warn(`Skipping CoinGecko for ${symbol}: period ${days}d > 90d returns wrong granularity`);
+    } else if (coinId) {
+      try {
+        const data = await fetchCoinGecko(coinId, days);
+        if (plausiblePriceRange(symbol, data)) {
+          return res.status(200).json({ success: true, symbol, interval, data, source: 'coingecko', count: data.length });
+        }
+        console.warn(`CoinGecko sanity check failed for ${symbol}; trying Binance`);
+      } catch (cgErr) {
+        console.warn(`CoinGecko failed for ${symbol}: ${cgErr.message}`);
+      }
+    }
+
+    // ── Tertiary: Binance (good for intraday, poor for long periods) ───────────
+    try {
+      const data = await fetchBinance(symbol, interval, days);
+      if (plausiblePriceRange(symbol, data)) {
+        return res.status(200).json({ success: true, symbol, interval, data, source: 'binance', count: data.length });
+      }
+      console.warn(`Binance sanity check failed for ${symbol}`);
+    } catch (bnErr) {
+      console.warn(`Binance failed for ${symbol} (${interval}): ${bnErr.message}`);
+    }
+
     return res.status(200).json({ success: false, error: `All data sources failed for ${symbol} (${interval}). Please try again later.` });
   }
 
