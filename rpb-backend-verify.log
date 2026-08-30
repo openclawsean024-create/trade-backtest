@@ -1,27 +1,18 @@
-=== M4 verify ===
---- PRD/SPEC.md exists ---
-exists
+=== M5 verify ===
+--- node --check (klines, fundamental, signal-monitor) ---
 exit=0
---- vercel.json JSON parses ---
-JSON OK
+--- node tests/run.js ---
+5 passed, 0 failed
 exit=0
---- node --check (4 files) ---
-JS OK
+--- node -e require fundamental ---
+fundamental OK
 exit=0
---- git diff --stat vercel.json ---
- vercel.json | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
---- git diff vercel.json ---
-diff --git a/vercel.json b/vercel.json
-index b70e473..248a1cb 100644
---- a/vercel.json
-+++ b/vercel.json
-@@ -14,7 +14,7 @@
-       "use": "@vercel/static"
-     },
-     {
--      "src": "SPEC.md",
-+      "src": "PRD/SPEC.md",
-       "use": "@vercel/static"
-     },
-     {
+--- node -e require klines ---
+klines OK
+exit=0
+--- node --check (full suite, 4 files) ---
+exit=0
+--- git diff --stat api/ ---
+ api/fundamental.js | 31 ++++++++++++++++++++++++++++++-
+ api/klines.js      | 36 ++++++++++++++++++++++++++++++++++++
+ 2 files changed, 66 insertions(+), 1 deletion(-)

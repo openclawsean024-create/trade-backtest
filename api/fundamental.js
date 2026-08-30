@@ -1,4 +1,27 @@
-const fetch = require('node-fetch');
+// Removed `const fetch = require('node-fetch')` (M5):
+// repo has no package.json so node-fetch is not installed; use Node 18+
+// global `fetch` instead. Vercel's @vercel/node runtime is Node 18+ by
+// default as of 2025; if a deployment lands on an older runtime this
+// handler will throw — tracked in FOLLOWUP.md.
+
+// ── Input validation (M5) ──────────────────────────────────────────────────────
+const SYMBOL_RE = /^[A-Z0-9._-]{1,20}$/;
+
+function validateSymbol(s) {
+  if (typeof s !== 'string' || s.length === 0) {
+    return { ok: false, reason: 'symbol must be a non-empty string' };
+  }
+  if (s.length > 20) {
+    return { ok: false, reason: 'symbol too long (max 20 chars)' };
+  }
+  if (s.includes('://') || s.includes('..') || s.includes('/')) {
+    return { ok: false, reason: 'symbol contains disallowed characters' };
+  }
+  if (!SYMBOL_RE.test(s)) {
+    return { ok: false, reason: 'symbol contains non-alphanumeric characters' };
+  }
+  return { ok: true, value: s };
+}
 
 module.exports = async (req, res) => {
   // CORS headers
@@ -14,6 +37,12 @@ module.exports = async (req, res) => {
 
   if (!symbol) {
     return res.status(400).json({ error: 'Missing symbol parameter' });
+  }
+
+  // M5: strict input validation
+  const symCheck = validateSymbol(symbol);
+  if (!symCheck.ok) {
+    return res.status(400).json({ error: symCheck.reason });
   }
 
   const headers = {

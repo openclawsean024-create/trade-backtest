@@ -16,6 +16,32 @@
 //   days 366+   → monthly candles ✗ wrong granularity for 1d chart
 // → Only use CoinGecko as last resort for 1d/1w short periods (< 90 days)
 
+// ── Input validation (M5) ──────────────────────────────────────────────────────
+// Reject non-alphanumeric symbols, length > 20, and SSRF / path-traversal probes.
+const SYMBOL_RE = /^[A-Z0-9._-]{1,20}$/;
+const VALID_INTERVALS = ['1m', '5m', '15m', '1h', '4h', '1d', '1w'];
+
+function validateSymbol(s) {
+  if (typeof s !== 'string' || s.length === 0) {
+    return { ok: false, reason: 'symbol must be a non-empty string' };
+  }
+  if (s.length > 20) {
+    return { ok: false, reason: 'symbol too long (max 20 chars)' };
+  }
+  if (s.includes('://') || s.includes('..') || s.includes('/')) {
+    return { ok: false, reason: 'symbol contains disallowed characters' };
+  }
+  if (!SYMBOL_RE.test(s)) {
+    return { ok: false, reason: 'symbol contains non-alphanumeric characters' };
+  }
+  return { ok: true, value: s };
+}
+
+function validateInterval(i) {
+  if (VALID_INTERVALS.includes(i)) return { ok: true, value: i };
+  return { ok: false, reason: `interval must be one of ${VALID_INTERVALS.join(',')}` };
+}
+
 function isValidCandle(candle) {
   if (!candle.open || !candle.high || !candle.low || !candle.close) return false;
   if (candle.open <= 0 || candle.high <= 0 || candle.low <= 0 || candle.close <= 0) return false;
@@ -292,6 +318,16 @@ module.exports = async (req, res) => {
 
   if (!symbol) {
     return res.status(400).json({ success: false, error: 'Missing symbol' });
+  }
+
+  // M5: strict input validation
+  const symCheck = validateSymbol(symbol);
+  if (!symCheck.ok) {
+    return res.status(400).json({ success: false, error: symCheck.reason });
+  }
+  const intervalCheck = validateInterval(interval);
+  if (!intervalCheck.ok) {
+    return res.status(400).json({ success: false, error: intervalCheck.reason });
   }
 
   const stockSymbols = ['AAPL', 'GOOGL', 'MSFT', 'TSLA', 'AMZN', 'META', 'NVDA', 'AMD'];
