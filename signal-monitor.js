@@ -430,4 +430,5 @@ if (args[0] === '--watch' || args[0] === '-w') {
     monitorSignals(config).catch(console.error);
 }
 
-module.exports = { monitorSignals, detectSignals };
+// Exposed for testability (M2 QA smoke tests). Behavior unchanged.
+module.exports = { monitorSignals, detectSignals, calculateMA, calculateRSI, calculateMACD };

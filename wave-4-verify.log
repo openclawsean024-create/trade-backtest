@@ -1,0 +1,22 @@
+=== Wave 4 verify — M9 final settlement ===
+--- BUILD_REPORT.md exists ---
+     107 BUILD_REPORT.md
+--- FOLLOWUP.md exists ---
+     156 FOLLOWUP.md
+--- loop/lessons.md exists ---
+     120 loop/lessons.md
+--- loop/reflection/wave-{1,2,3,4}-post-mortem.md exist ---
+       4
+  loop/reflection/wave-1-post-mortem.md OK (      50 lines)
+  loop/reflection/wave-2-post-mortem.md OK (      55 lines)
+  loop/reflection/wave-3-post-mortem.md OK (      56 lines)
+  loop/reflection/wave-4-post-mortem.md OK (      63 lines)
+--- regression gate: node --check (4 files) ---
+exit=0
+--- regression gate: node tests/run.js ---
+5 passed, 0 failed
+exit=0
+--- regression gate: python3 scripts/verify.py ---
+  exit=0
+--- summary ---
+  result=PASS

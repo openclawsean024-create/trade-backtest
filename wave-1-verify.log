@@ -1,0 +1,12 @@
+=== Wave 1 verify — re-running all done milestones' commands ===
+--- M1: PLAN.md exists ---
+     125 PLAN.md
+exit=0
+--- M2: node tests/run.js ---
+5 passed, 0 failed
+exit=0
+--- M2+M3 gate: node --check (4 files) ---
+exit=0
+--- M3: YAML parse ci.yml ---
+YAML OK
+exit=0

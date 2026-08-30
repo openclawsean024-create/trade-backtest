@@ -1,0 +1,5 @@
+=== YAML parse ===
+YAML_OK exit=0
+
+=== node --check ===
+JS_OK exit=0

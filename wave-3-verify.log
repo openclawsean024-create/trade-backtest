@@ -1,0 +1,16 @@
+=== Wave 3 verify — M7 + M8 ===
+--- M7: CSP meta present ---
+1
+--- M7: HTML stack balance ---
+--- M8: 3 docs files exist ---
+  README.md OK (     130 lines)
+  CHANGELOG.md OK (      79 lines)
+  AGENTS.md OK (      80 lines)
+--- shared gate: node --check (4 files) ---
+JS OK
+--- shared gate: node tests/run.js ---
+5 passed, 0 failed
+--- shared gate: python3 scripts/verify.py ---
+  exit=0
+--- summary ---
+  result=PASS

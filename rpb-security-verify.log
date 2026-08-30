@@ -1,0 +1,9 @@
+=== M6 verify ===
+--- secret patterns grep (must be 0 matches) ---
+grep exit=1
+--- node --check (4 files) ---
+exit=0
+--- SECURITY_FINDINGS.md exists ---
+     232 SECURITY_FINDINGS.md
+--- git status ---
+?? SECURITY_FINDINGS.md

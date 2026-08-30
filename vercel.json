@@ -14,7 +14,7 @@
       "use": "@vercel/static"
     },
     {
-      "src": "SPEC.md",
+      "src": "PRD/SPEC.md",
       "use": "@vercel/static"
     },
     {

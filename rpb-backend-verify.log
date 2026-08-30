@@ -1,0 +1,18 @@
+=== M5 verify ===
+--- node --check (klines, fundamental, signal-monitor) ---
+exit=0
+--- node tests/run.js ---
+5 passed, 0 failed
+exit=0
+--- node -e require fundamental ---
+fundamental OK
+exit=0
+--- node -e require klines ---
+klines OK
+exit=0
+--- node --check (full suite, 4 files) ---
+exit=0
+--- git diff --stat api/ ---
+ api/fundamental.js | 31 ++++++++++++++++++++++++++++++-
+ api/klines.js      | 36 ++++++++++++++++++++++++++++++++++++
+ 2 files changed, 66 insertions(+), 1 deletion(-)
