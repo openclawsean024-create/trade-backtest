@@ -1,0 +1,17 @@
+=== Wave 2 verify — M4 + M5 + M6 ===
+--- M4: vercel.json SPEC path ---
+      "src": "PRD/SPEC.md",
+OK
+--- M4: vercel.json JSON parses ---
+JSON OK
+--- M5: validateSymbol present in both handlers ---
+api/klines.js:1
+api/fundamental.js:1
+--- M5: node-fetch removed ---
+2
+--- M6: SECURITY_FINDINGS.md exists ---
+     232 SECURITY_FINDINGS.md
+--- shared gate: node --check (4 files) ---
+JS OK
+--- shared gate: node tests/run.js ---
+5 passed, 0 failed
