@@ -1,0 +1,61 @@
+# trade-backtest CI
+#
+# SHA-pinned GitHub Actions workflow.
+#
+# Why SHA-pinned (not @v4 / @main / @v4.2.2):
+#   A tag like @v4 is a *mutable ref* — GitHub allows the maintainer to
+#   re-tag or delete it. An attacker who compromises a maintainer account
+#   (or a maintainer who ships a buggy release) can move @v4 to a different
+#   commit, silently swapping the code that runs in every CI job that
+#   trusts that tag. Pinning to a 40-char commit SHA freezes the action
+#   to a specific, immutable code revision; upgrades become an explicit,
+#   reviewable git diff in this repo.
+#
+# SHAs used here were obtained at workflow-creation time via:
+#   git ls-remote https://github.com/actions/checkout  refs/heads/main
+#   git ls-remote https://github.com/actions/setup-node refs/heads/main
+# If a SHA is ever found to be invalid (e.g. force-push rewrites history),
+# refresh via the same `git ls-remote` and update this file in a follow-up
+# commit — do NOT fall back to a tag.
+#
+# Cache exception:
+#   PLAN.md says "cache 用 setup-node 的 cache 參數", but `cache: 'npm'`
+#   requires a package.json / lockfile and this repo intentionally has
+#   neither (pure JS, no npm). Passing cache: 'npm' here would fail the
+#   job. The `cache:` key is therefore omitted entirely (equivalent to
+#   no cache). Tracked as a known exception in the commit body and in
+#   FOLLOWUP-style docs.
+
+name: ci
+
+on:
+  push:
+    branches:
+      - master
+      - "feat/**"
+      - "fix/**"
+      - "chore/**"
+      - "docs/**"
+      - "test/**"
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a # v4
+
+      - name: setup node 20
+        uses: actions/setup-node@94196ee1d15439c1b6651cd87ef14e88ec435966 # v4
+
+      - name: node --check (regression gate from M2)
+        run: node --check lightweight-charts.4.1.0.js signal-monitor.js api/klines.js api/fundamental.js
+
+      - name: run test runner (M2)
+        run: node tests/run.js
