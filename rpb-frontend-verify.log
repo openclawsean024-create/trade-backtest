@@ -1,0 +1,17 @@
+=== M7 verify ===
+--- CSP meta tag count (PLAN.md: ≥ 1) ---
+count=1
+OK
+--- HTML stack balance (Python HTMLParser) ---
+unclosed: none
+errors: none
+exit=0
+exit=0
+--- shared gate: node --check (4 files) ---
+exit=0
+--- shared gate: node tests/run.js ---
+5 passed, 0 failed
+exit=0
+--- diff stat index.html ---
+ index.html | 5 +++++
+ 1 file changed, 5 insertions(+)
