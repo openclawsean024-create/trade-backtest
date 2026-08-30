@@ -1,0 +1,17 @@
+=== M2 QA verify — 2026-08-30T14:46:21Z ===
+
+=== [1/2] node tests/run.js ===
+5 passed, 0 failed
+exit_code=0
+
+=== [2/2] node --check lightweight-charts.4.1.0.js signal-monitor.js api/klines.js api/fundamental.js ===
+exit_code=0
+
+=== Summary ===
+test_runner: 5 tests, all passing
+node --check: all 4 files parse clean
+files changed:
+  - signal-monitor.js  (export expansion, additive only)
+  - tests/run.js       (NEW: stdlib-only test harness)
+  - tests/signal-monitor.test.js  (NEW: 5 smoke tests)
+  - rpb-qa-verify.log  (NEW: this file)
