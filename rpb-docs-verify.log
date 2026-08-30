@@ -1,0 +1,22 @@
+=== M8 verify ===
+--- README.md, CHANGELOG.md, AGENTS.md exist ---
+README OK (     130 lines)
+CHANGELOG OK (      79 lines)
+AGENTS OK (      80 lines, real content)
+--- markdown link path check (README relative paths exist) ---
+--- shared gate: node --check (4 files) ---
+exit=0
+--- shared gate: node tests/run.js ---
+5 passed, 0 failed
+exit=0
+--- shared gate: python3 scripts/verify.py ---
+  $ /Users/sean/.local/bin/node tests/run.js  (cwd=/Users/sean/Documents/Agent space/prompts/trade-backtest/.clone)
+5 passed, 0 failed
+  exit=0
+--- summary ---
+  result=PASS
+exit=0
+--- git status ---
+ M AGENTS.md
+?? CHANGELOG.md
+?? README.md
