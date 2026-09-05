@@ -129,3 +129,5 @@ for the full product specification.
 - `PRD/SPEC.md` — full product spec (v2.2.1, 28 KB Traditional Chinese).
 - `SECURITY_FINDINGS.md` — M6 audit findings (medium/low, all deferred).
 - `PLAN.md` — the autonomous-development-loop plan this run followed.
+
+<!-- Last validated: 2026-09-06 by OpenClaw Overnight Dev -->
