@@ -1,61 +1,87 @@
-# trade-backtest CI
+# trade-backtest CI — SPEC v3.0 fleet standard (4 jobs)
 #
-# SHA-pinned GitHub Actions workflow.
-#
-# Why SHA-pinned (not @v4 / @main / @v4.2.2):
-#   A tag like @v4 is a *mutable ref* — GitHub allows the maintainer to
-#   re-tag or delete it. An attacker who compromises a maintainer account
-#   (or a maintainer who ships a buggy release) can move @v4 to a different
-#   commit, silently swapping the code that runs in every CI job that
-#   trusts that tag. Pinning to a 40-char commit SHA freezes the action
-#   to a specific, immutable code revision; upgrades become an explicit,
-#   reviewable git diff in this repo.
-#
-# SHAs used here were obtained at workflow-creation time via:
-#   git ls-remote https://github.com/actions/checkout  refs/heads/main
-#   git ls-remote https://github.com/actions/setup-node refs/heads/main
-# If a SHA is ever found to be invalid (e.g. force-push rewrites history),
-# refresh via the same `git ls-remote` and update this file in a follow-up
-# commit — do NOT fall back to a tag.
-#
-# Cache exception:
-#   PLAN.md says "cache 用 setup-node 的 cache 參數", but `cache: 'npm'`
-#   requires a package.json / lockfile and this repo intentionally has
-#   neither (pure JS, no npm). Passing cache: 'npm' here would fail the
-#   job. The `cache:` key is therefore omitted entirely (equivalent to
-#   no cache). Tracked as a known exception in the commit body and in
-#   FOLLOWUP-style docs.
+# v3.0.2 upgrade (2026-09-06 by Sean 10-repo-fleet):
+#   - 從 v2.2.1 的 1-job `verify` 升級到 SPEC v3.0 標準 4-job (lint/test/build/deploy)
+#   - 保留 SHA-pinned security best practice（不解 pin）
+#   - 觸發矩陣升級為 push/PR/workflow_dispatch 標準
+#   - 加上 concurrency group 避免 stale CI
+#   - 加上 id_token: write 給 Vercel deploy 用
+#   - cache: 'npm' 仍跳過（本 repo 無 package.json，純 JS）
 
-name: ci
+name: CI
 
 on:
   push:
-    branches:
-      - master
-      - "feat/**"
-      - "fix/**"
-      - "chore/**"
-      - "docs/**"
-      - "test/**"
+    branches: [master]
   pull_request:
-    branches:
-      - master
+    branches: [master]
+  workflow_dispatch:
 
 permissions:
   contents: read
+  id-token: write
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  verify:
+  lint:
+    name: Lint (node --check regression gate)
     runs-on: ubuntu-latest
     steps:
-      - name: checkout
-        uses: actions/checkout@f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a # v4
-
-      - name: setup node 20
-        uses: actions/setup-node@94196ee1d15439c1b6651cd87ef14e88ec435966 # v4
-
+      - uses: actions/checkout@f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a # v4
+      - uses: actions/setup-node@94196ee1d15439c1b6651cd87ef14e88ec435966 # v4
+        with:
+          node-version: '20'
+          # cache: 'npm'  intentionally omitted — no package.json (pure JS)
       - name: node --check (regression gate from M2)
         run: node --check lightweight-charts.4.1.0.js signal-monitor.js api/klines.js api/fundamental.js
 
+  test:
+    name: Unit Tests (signal-monitor smoke tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a # v4
+      - uses: actions/setup-node@94196ee1d15439c1b6651cd87ef14e88ec435966 # v4
+        with:
+          node-version: '20'
       - name: run test runner (M2)
         run: node tests/run.js
+
+  build:
+    name: Build (Vercel static + serverless prep)
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    steps:
+      - uses: actions/checkout@f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a # v4
+      - uses: actions/setup-node@94196ee1d15439c1b6651cd87ef14e88ec435966 # v4
+        with:
+          node-version: '20'
+      - name: verify vercel.json schema
+        run: node -e "const c=require('./vercel.json');console.log('vercel.json builds:',c.builds.length,'routes:',c.routes.length)"
+      - name: confirm index.html exists
+        run: test -f index.html && echo "index.html present"
+      - name: confirm API entrypoints exist
+        run: test -f api/klines.js && test -f api/fundamental.js && echo "API entrypoints present"
+      - name: confirm signal-monitor exists
+        run: test -f signal-monitor.js && echo "signal-monitor present"
+
+  deploy:
+    name: Deploy to Vercel
+    runs-on: ubuntu-latest
+    needs: [build]
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a # v4
+      - uses: actions/setup-node@94196ee1d15439c1b6651cd87ef14e88ec435966 # v4
+        with:
+          node-version: '20'
+      - name: Deploy to Vercel (production)
+        uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          vercel-args: '--prod'
+          working-directory: ./

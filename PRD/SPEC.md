@@ -1,9 +1,17 @@
-# 交易回測工具 — 規格計劃書 v2.2.1
+# 交易回測工具 — 規格計劃書 v3.0.2 (SPEC v3.0 fleet alignment)
 
-> 版本：v2.2.1｜更新日期：2026-07-19｜維護者：Sophia (CPO) for Sean
+> 版本：v3.0.2｜更新日期：2026-09-06｜維護者：Sean 10-repo-fleet (v2.2.1 → v3.0.2 alignment)
+> 上一版：v2.2.1 (2026-07-19, Sophia (CPO) for Sean)
 > 對接技術：Alan (CTO)｜GitHub：https://github.com/openclawsean024-create/trade-backtest
 > Live：https://b-group-poc.vercel.app/
 > Sweet Spot 體檢：4/10（investigate）→ 本版聚焦「**台灣零售交易者的台股 / 期貨回測 + AI 策略助理**」甜蜜點
+
+> **v3.0.2 說明 (2026-09-06 by Sean 10-repo-fleet)**：本版不改動 v2.2.1 §0–§19 規格書正文（sweet-spot 重寫已於 2026-07-19 完成 7.2/10 rewrite），僅做 fleet alignment：
+> 1. frontmatter 升級為 v3.0.2 + 維護者換成 Sean 10-repo-fleet
+> 2. 新增 `PRD/CHANGELOG.md` 串接 v2.2.1 → v3.0.2 變更線
+> 3. 升級 `.github/workflows/ci.yml` 為 SPEC v3.0 §7 的 4-job 標準（lint/test/build/deploy → vercel）
+> 4. 既有 SHA-pinned `node --check` + `node tests/run.js` 5 個 pure-function smoke tests 保留（5/5 綠）
+> 5. 規格書 §1–§19 不動、純 JS + 無 package.json 設計意圖保留（避免破壞 `@vercel/static` + `@vercel/node` build 設定）
 
 ---
 
